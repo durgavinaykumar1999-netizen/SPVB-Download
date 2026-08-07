@@ -89,12 +89,12 @@ async def not_found_handler(request, exc):
 # Exception handler
 @app.exception_handler(Exception)
 async def exception_handler(request, exc):
-    logger.error(f"Exception: {str(exc)}")
+    logger.error(f"Exception: {str(exc)}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={
             "success": False,
-            "message": "Internal server error",
+            "message": str(exc),
             "code": 500
         }
     )
