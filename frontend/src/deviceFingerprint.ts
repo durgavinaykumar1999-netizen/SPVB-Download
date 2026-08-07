@@ -22,7 +22,8 @@ export function generateDeviceFingerprint(): DeviceFingerprint {
   const screenResolution = `${window.screen.width}x${window.screen.height}`;
   const platform = navigator.platform;
   const hardwareConcurrency = navigator.hardwareConcurrency || 0;
-  const deviceMemory = (navigator.deviceMemory as any) || 0;
+  // deviceMemory is not universally supported, use optional chaining
+  const deviceMemory = (navigator as any).deviceMemory || 0;
 
   // Create fingerprint string from all collected data
   const fingerprintData = `${userAgent}|${timezone}|${language}|${screenResolution}|${platform}|${hardwareConcurrency}|${deviceMemory}`;
