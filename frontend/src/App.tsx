@@ -35,9 +35,20 @@ function App() {
   const [message, setMessage] = useState<string>('');
   const [showHistory, setShowHistory] = useState(false);
   const [autoDownloadCompleted, setAutoDownloadCompleted] = useState<Set<string>>(new Set());
+  const [hiddenDownloadIds, setHiddenDownloadIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const savedSessionId = localStorage.getItem('spvb_session_id');
+    const savedHiddenIds = localStorage.getItem('spvb_hidden_downloads');
+
+    if (savedHiddenIds) {
+      try {
+        setHiddenDownloadIds(new Set(JSON.parse(savedHiddenIds)));
+      } catch (e) {
+        console.error('Failed to parse hidden downloads:', e);
+      }
+    }
+
     if (savedSessionId) {
       setSessionId(savedSessionId);
       setMessage('✅ Session restored');
@@ -64,10 +75,16 @@ function App() {
         setAutoDownloadCompleted(
           new Set([...autoDownloadCompleted, d.download_id])
         );
+
+        // Hide this download from view and save to localStorage
+        const newHiddenIds = new Set([...hiddenDownloadIds, d.download_id]);
+        setHiddenDownloadIds(newHiddenIds);
+        localStorage.setItem('spvb_hidden_downloads', JSON.stringify([...newHiddenIds]));
+
         triggerAutoDownload(d.download_id);
       }
     });
-  }, [downloads, autoDownloadCompleted]);
+  }, [downloads, autoDownloadCompleted, hiddenDownloadIds]);
 
   const createSession = async () => {
     try {
@@ -201,7 +218,10 @@ function App() {
         setMetadata(null);
         setDownloads([]);
         setShowHistory(false);
+        setHiddenDownloadIds(new Set());
+        setAutoDownloadCompleted(new Set());
         localStorage.removeItem('spvb_session_id');
+        localStorage.removeItem('spvb_hidden_downloads');
 
         setTimeout(() => createSession(), 1000);
       }
@@ -210,7 +230,12 @@ function App() {
     }
   };
 
-  const activeDownloads = downloads.filter((d) => d.status !== 'completed');
+  // Filter out hidden downloads (completed downloads that user has already seen)
+  const activeDownloads = downloads.filter(
+    (d) => d.status !== 'completed' && !hiddenDownloadIds.has(d.download_id)
+  );
+
+  // Show completed downloads only in history modal
   const completedDownloads = downloads.filter((d) => d.status === 'completed');
 
   return (
