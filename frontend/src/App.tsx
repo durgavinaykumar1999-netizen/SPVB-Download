@@ -13,6 +13,7 @@ interface Metadata {
   uploader?: string;
   qualities: Quality[];
   platform: string;
+  is_age_restricted?: boolean;
 }
 
 interface Download {
@@ -293,6 +294,12 @@ function App() {
                   <p className="uploader">
                     <span className="uploader-icon">👤</span> {metadata.uploader}
                   </p>
+                )}
+
+                {metadata.is_age_restricted && (
+                  <div className="warning-badge">
+                    <span className="warning-icon">⚠</span> Age-Restricted Content
+                  </div>
                 )}
 
                 <div className="quality-section">

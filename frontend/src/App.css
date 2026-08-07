@@ -451,6 +451,24 @@
   font-size: 1.1rem;
 }
 
+.warning-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 15px 0;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.warning-icon {
+  font-size: 1.1rem;
+}
+
 .quality-section {
   margin: 20px 0;
 }
