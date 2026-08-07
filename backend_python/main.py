@@ -1,7 +1,5 @@
 import os
-import sys
 import logging
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,11 +7,9 @@ from fastapi.responses import JSONResponse
 import uvicorn
 from dotenv import load_dotenv
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from config.env import config
-from routes.public_routes import router as public_router
-from utils.logger import setup_logger
+from .config.env import config
+from .routes.public_routes import router as public_router
+from .utils.logger import setup_logger
 
 # Load environment variables
 load_dotenv()
