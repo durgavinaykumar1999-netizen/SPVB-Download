@@ -1,14 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query, Depends, Header
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
 import uuid
 import aiohttp
-import os
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
 from ..services.cleanup_service import CleanupService
-from ..middleware.device_verification import verify_device_fingerprint
 from ..utils.logger import setup_logger
 from ..config.env import config
 
