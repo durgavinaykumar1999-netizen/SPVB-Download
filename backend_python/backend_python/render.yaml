@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: spvb-downloader
+    runtime: python
+    runtimeVersion: 3.12.0
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MONGODB_URI
+        value: mongodb+srv://vinaymail1820_db_user:q8lOQH5blNq3Ohd0@cluster0.h3gwjmu.mongodb.net/spvb-downloader
+      - key: CLOUDINARY_CLOUD_NAME
+        value: dnlxnj0e1
+      - key: CLOUDINARY_API_KEY
+        value: "759347421676118"
+      - key: CLOUDINARY_API_SECRET
+        value: lHkY4w26XfNckBYgWD16WAAwAVk
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "8000"
+      - key: LOG_LEVEL
+        value: info
+      - key: SESSION_SECRET
+        value: your-secret-key-change-in-production
+      - key: DOWNLOAD_TIMEOUT
+        value: "900000"
+      - key: DOWNLOAD_QUALITY
+        value: best
+      - key: VIDEO_FORMAT
+        value: mp4
