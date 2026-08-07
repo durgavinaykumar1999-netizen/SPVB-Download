@@ -1,0 +1,23 @@
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Configuration
+python-dotenv==1.0.0
+
+# Database
+pymongo[srv]==4.6.1
+dnspython==2.6.1
+
+# Cloud Storage
+cloudinary==1.36.0
+
+# Video Downloading
+yt-dlp==2024.1.1
+pytubefix==7.1.7
+instaloader==4.13
+
+# Utilities
+requests==2.31.0
+aiofiles==23.2.1
+python-multipart==0.0.6

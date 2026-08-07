@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: spvb-downloader-backend
+    env: python
+    region: oregon
+    plan: starter
+
+    buildCommand: |
+      pip install --upgrade pip && \
+      pip install -r backend_python/requirements.txt
+
+    startCommand: |
+      cd backend_python && \
+      python -m uvicorn main:app --host 0.0.0.0 --port $PORT
+
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        value: dnlxnj0e1
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: LOG_LEVEL
+        value: info
+      - key: SESSION_SECRET
+        sync: false
+      - key: DOWNLOAD_TIMEOUT
+        value: 900000
+      - key: DOWNLOAD_QUALITY
+        value: best
+      - key: VIDEO_FORMAT
+        value: mp4
