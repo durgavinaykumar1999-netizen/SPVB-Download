@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 
 interface Quality {
@@ -207,7 +207,7 @@ function App() {
       <div className="container">
         <header className="header">
           <div className="header-content">
-            <div className="logo-icon">🎬</div>
+            <img src="/logo.png" alt="SPVB Logo" className="logo-icon" />
             <h1>SPVB Downloader</h1>
             <p>Download videos from YouTube, Instagram, Facebook, TikTok, Twitter & More</p>
           </div>
@@ -248,7 +248,7 @@ function App() {
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               className="input-url"
-              onKeyPress={(e) => e.key === 'Enter' && fetchMetadata()}
+              onKeyDown={(e) => e.key === 'Enter' && fetchMetadata()}
             />
             <button
               onClick={fetchMetadata}

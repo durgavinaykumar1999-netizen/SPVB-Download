@@ -67,18 +67,21 @@
 }
 
 .logo-icon {
-  font-size: 4rem;
+  width: 100px;
+  height: 100px;
   margin-bottom: 20px;
   display: inline-block;
-  animation: rotate 3s ease-in-out infinite;
+  animation: slideDown 0.8s ease-out, float-logo 3s ease-in-out infinite;
+  animation-delay: 0s, 0.8s;
+  filter: drop-shadow(0 4px 12px rgba(102, 126, 234, 0.4));
 }
 
-@keyframes rotate {
+@keyframes float-logo {
   0%, 100% {
-    transform: rotateY(0deg) scale(1);
+    transform: translateY(0px);
   }
   50% {
-    transform: rotateY(180deg) scale(1.1);
+    transform: translateY(-10px);
   }
 }
 
@@ -90,7 +93,8 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 15px;
-  animation: slideDown 0.8s ease-out 0.1s both;
+  margin-top: 20px;
+  animation: slideDown 0.8s ease-out 0.2s both;
 }
 
 .header p {
@@ -694,7 +698,8 @@
   }
 
   .logo-icon {
-    font-size: 2.5rem;
+    width: 80px;
+    height: 80px;
   }
 
   .container {
@@ -728,7 +733,8 @@
     }
 
     .logo-icon {
-      font-size: 2rem;
+      width: 60px;
+      height: 60px;
     }
 
     .btn {
