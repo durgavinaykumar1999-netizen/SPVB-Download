@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from .config.env import config
 from .routes.public_routes import router as public_router
 from .utils.logger import setup_logger
+from .services.cleanup_service import CleanupService
 
 # Load environment variables
 load_dotenv()
@@ -27,6 +28,10 @@ app = FastAPI(
 @app.on_event("startup")
 async def startup_event():
     logger.info(f"Server started on port {config.port} in {config.node_env} mode")
+
+    # Initialize cleanup service for auto-deletion
+    CleanupService()
+
     print(f"""
 ====================================================================
   Social Media Downloader Backend - Started Successfully
@@ -41,7 +46,8 @@ async def startup_event():
     - Health: GET /api/health
 
   All downloads are session-based - No login required
-  Auto-cleanup after 30 minutes - In-memory storage
+  Auto-cleanup after 30 minutes - MongoDB & Cloudinary
+  Cleanup runs every 5 minutes
 ====================================================================
     """)
 

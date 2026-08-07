@@ -172,6 +172,34 @@ function App() {
     }
   };
 
+  const endSession = async () => {
+    try {
+      setMessage(`⏳ Ending session and cleaning up...`);
+
+      const res = await fetch(
+        `${apiUrl}/api/session/end?session_id=${sessionId}`,
+        { method: 'POST' }
+      );
+
+      const data = await res.json();
+      if (data.success) {
+        setMessage(`✅ ${data.message}`);
+        setSessionId('');
+        setUrl('');
+        setMetadata(null);
+        setDownloads([]);
+        setDownloadedIds(new Set());
+        setDownloadingIds(new Set());
+
+        // Create a new session
+        setTimeout(() => createSession(), 1000);
+      }
+    } catch (error) {
+      console.error('Failed to end session:', error);
+      setMessage(`❌ Error ending session: ${error}`);
+    }
+  };
+
   return (
     <div className="app">
       <div className="background-animation"></div>
@@ -200,10 +228,16 @@ function App() {
             </div>
             <code className="session-id">{sessionId?.substring(0, 12)}...</code>
           </div>
-          <button onClick={createSession} className="btn btn-secondary">
-            <span className="btn-icon">↻</span>
-            New Session
-          </button>
+          <div className="session-actions">
+            <button onClick={createSession} className="btn btn-secondary">
+              <span className="btn-icon">↻</span>
+              New Session
+            </button>
+            <button onClick={endSession} className="btn btn-end-session">
+              <span className="btn-icon">✕</span>
+              End & Cleanup
+            </button>
+          </div>
         </div>
 
         <div className="card input-card">

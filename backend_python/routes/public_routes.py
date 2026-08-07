@@ -7,6 +7,7 @@ import aiohttp
 import os
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
+from ..services.cleanup_service import CleanupService
 from ..utils.logger import setup_logger
 from ..config.env import config
 
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/api", tags=["public"])
 
 session_service = SessionService()
 download_service = DownloadService()
+cleanup_service = CleanupService()
 
 class SessionRequest(BaseModel):
     pass
@@ -181,11 +183,12 @@ async def set_save_path(request: SavePathRequest):
 @router.post("/session/end")
 async def end_session(session_id: str = Query(...)):
     try:
-        await session_service.delete_session(session_id)
+        # Use cleanup service for immediate cleanup of session and related data
+        await cleanup_service.cleanup_session_immediate(session_id)
 
         return {
             "success": True,
-            "message": "Session ended"
+            "message": "Session ended and all data deleted"
         }
     except Exception as e:
         logger.error(f"Session end error: {str(e)}")
