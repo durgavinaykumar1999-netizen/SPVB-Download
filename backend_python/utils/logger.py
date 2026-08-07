@@ -1,6 +1,6 @@
 import logging
 import os
-from config.env import config
+from ..config.env import config
 
 def setup_logger():
     logger = logging.getLogger("spvb_downloader")

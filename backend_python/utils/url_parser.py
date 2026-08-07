@@ -1,5 +1,5 @@
 from urllib.parse import urlparse, parse_qs
-from utils.logger import setup_logger
+from .logger import setup_logger
 
 logger = setup_logger()
 
