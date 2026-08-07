@@ -35,12 +35,10 @@ function App() {
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
-  // Create session on mount
   useEffect(() => {
     createSession();
   }, []);
 
-  // Poll downloads
   useEffect(() => {
     if (!sessionId) return;
     const interval = setInterval(() => {
@@ -55,7 +53,7 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setSessionId(data.session_id);
-        setMessage('✅ Session created');
+        setMessage('✅ Session created successfully');
       }
     } catch (error) {
       setMessage(`❌ Failed to create session: ${error}`);
@@ -109,7 +107,7 @@ function App() {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage(`✅ Download started: ${data.download_id}`);
+        setMessage(`✅ Download started!`);
         fetchDownloads();
       } else {
         setMessage(`❌ ${data.message || 'Failed to start download'}`);
@@ -176,63 +174,87 @@ function App() {
 
   return (
     <div className="app">
+      <div className="background-animation"></div>
+
       <div className="container">
         <header className="header">
-          <h1>🎬 SPVB - Social Media Video Downloader</h1>
-          <p>Download videos from YouTube, Instagram, Facebook, TikTok, Twitter</p>
+          <div className="header-content">
+            <div className="logo-icon">🎬</div>
+            <h1>SPVB Downloader</h1>
+            <p>Download videos from YouTube, Instagram, Facebook, TikTok, Twitter & More</p>
+          </div>
         </header>
 
         {message && (
           <div className={`message ${message.includes('✅') ? 'success' : 'error'}`}>
+            <span className="message-icon">{message.includes('✅') ? '✓' : '✕'}</span>
             {message}
           </div>
         )}
 
-        <div className="session-info">
-          <p>
-            Session ID: <code>{sessionId?.substring(0, 8)}...</code>
-          </p>
-          <button onClick={createSession} className="btn-secondary">
+        <div className="card session-card">
+          <div className="session-header">
+            <div className="session-status">
+              <div className="status-dot"></div>
+              <span>Session Active</span>
+            </div>
+            <code className="session-id">{sessionId?.substring(0, 12)}...</code>
+          </div>
+          <button onClick={createSession} className="btn btn-secondary">
+            <span className="btn-icon">↻</span>
             New Session
           </button>
         </div>
 
-        <div className="input-section">
-          <input
-            type="text"
-            placeholder="Paste video URL here..."
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="input-url"
-            onKeyPress={(e) => e.key === 'Enter' && fetchMetadata()}
-          />
-          <button
-            onClick={fetchMetadata}
-            disabled={loading || !url}
-            className="btn-primary"
-          >
-            {loading ? 'Loading...' : 'Get Info'}
-          </button>
+        <div className="card input-card">
+          <div className="input-group">
+            <input
+              type="text"
+              placeholder="Paste your video URL here..."
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="input-url"
+              onKeyPress={(e) => e.key === 'Enter' && fetchMetadata()}
+            />
+            <button
+              onClick={fetchMetadata}
+              disabled={loading || !url}
+              className="btn btn-primary"
+            >
+              <span className="btn-icon">🔍</span>
+              {loading ? 'Scanning...' : 'Get Info'}
+            </button>
+          </div>
         </div>
 
         {metadata && (
-          <div className="metadata-section">
+          <div className="card metadata-card">
+            <div className="metadata-header">
+              <div className="platform-badge">{metadata.platform.toUpperCase()}</div>
+            </div>
             <div className="metadata-content">
               {metadata.thumbnail && (
-                <img
-                  src={metadata.thumbnail}
-                  alt={metadata.title}
-                  className="thumbnail"
-                />
+                <div className="thumbnail-container">
+                  <img
+                    src={metadata.thumbnail}
+                    alt={metadata.title}
+                    className="thumbnail"
+                  />
+                  <div className="duration-badge">
+                    {Math.floor(metadata.duration / 60)}m
+                  </div>
+                </div>
               )}
               <div className="metadata-info">
                 <h2>{metadata.title}</h2>
-                <p>Duration: {Math.floor(metadata.duration / 60)} minutes</p>
-                {metadata.uploader && <p>Uploader: {metadata.uploader}</p>}
-                <p>Platform: {metadata.platform.toUpperCase()}</p>
+                {metadata.uploader && (
+                  <p className="uploader">
+                    <span className="uploader-icon">👤</span> {metadata.uploader}
+                  </p>
+                )}
 
                 <div className="quality-section">
-                  <label>Select Quality:</label>
+                  <label className="quality-label">Select Quality</label>
                   <select
                     value={selectedQuality}
                     onChange={(e) => setSelectedQuality(e.target.value)}
@@ -249,9 +271,10 @@ function App() {
                 <button
                   onClick={startDownload}
                   disabled={loading}
-                  className="btn-download"
+                  className="btn btn-download-large"
                 >
-                  {loading ? 'Downloading...' : '⬇️ Download Video'}
+                  <span className="btn-icon">⬇</span>
+                  {loading ? 'Initiating Download...' : 'Start Download'}
                 </button>
               </div>
             </div>
@@ -259,43 +282,67 @@ function App() {
         )}
 
         {downloads.length > 0 && (
-          <div className="downloads-section">
-            <h3>📥 Downloads ({downloads.length})</h3>
+          <div className="card downloads-card">
+            <div className="downloads-header">
+              <h3>📥 Download Queue</h3>
+              <span className="download-count">{downloads.length}</span>
+            </div>
             <div className="downloads-list">
               {downloads.map((d) => (
-                <div key={d.download_id} className={`download-item ${d.status}`}>
-                  <div className="download-id">
-                    ID: {d.download_id.substring(0, 8)}...
+                <div
+                  key={d.download_id}
+                  className={`download-item download-${d.status}`}
+                >
+                  <div className="download-header">
+                    <div className="download-status-badge">
+                      {d.status === 'completed' && '✓ Completed'}
+                      {d.status === 'downloading' && '⟳ Downloading'}
+                      {d.status === 'queued' && '⋯ Queued'}
+                      {d.status === 'failed' && '✕ Failed'}
+                    </div>
+                    <code className="download-id">
+                      {d.download_id.substring(0, 8)}
+                    </code>
                   </div>
-                  <div className="download-status">
-                    Status: <strong>{d.status.toUpperCase()}</strong>
-                  </div>
-                  {d.progress > 0 && (
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${d.progress}%` }}
-                      />
+
+                  {d.progress > 0 && d.status === 'downloading' && (
+                    <div className="progress-section">
+                      <div className="progress-bar-container">
+                        <div className="progress-bar">
+                          <div
+                            className="progress-fill"
+                            style={{ width: `${d.progress}%` }}
+                          >
+                            <span className="progress-text">{d.progress}%</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
-                  {d.error && <div className="error-text">❌ {d.error}</div>}
+
+                  {d.error && (
+                    <div className="error-message">
+                      <span className="error-icon">⚠</span> {d.error}
+                    </div>
+                  )}
+
                   {d.status === 'completed' && (
-                    <>
-                      <div className="success-text">✅ Ready for download</div>
+                    <div className="download-actions">
                       {downloadingIds.has(d.download_id) ? (
                         <div className="downloading-indicator">
                           <div className="spinner"></div>
-                          <span>Processing download...</span>
+                          <span>Processing...</span>
                         </div>
                       ) : (
                         <button
                           onClick={() => downloadFile(d.download_id)}
-                          className="btn-download-item"
+                          className="btn btn-download-action"
                         >
-                          {downloadedIds.has(d.download_id) ? '🔄 Retry Download' : '⬇️ Download to Local'}
+                          <span className="btn-icon">⬇</span>
+                          {downloadedIds.has(d.download_id) ? 'Retry Download' : 'Download Now'}
                         </button>
                       )}
-                    </>
+                    </div>
                   )}
                 </div>
               ))}
@@ -304,10 +351,10 @@ function App() {
         )}
 
         <footer className="footer">
-          <p>
-            Backend API: <code>{apiUrl}</code>
-          </p>
-          <p>All downloads are session-based • Auto-cleanup after 30 minutes</p>
+          <div className="footer-content">
+            <p>🔐 All downloads are session-based and private</p>
+            <p>⏱ Sessions auto-cleanup after 30 minutes</p>
+          </div>
         </footer>
       </div>
     </div>
