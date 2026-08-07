@@ -10,6 +10,10 @@ class URLParser:
         domain = parsed_url.netloc.replace("www.", "")
 
         if "youtube.com" in domain:
+            # Handle YouTube Shorts URLs (/shorts/VIDEO_ID)
+            if "/shorts/" in parsed_url.path:
+                return parsed_url.path.split("/shorts/")[1].split("?")[0]
+            # Handle standard YouTube URLs (v=VIDEO_ID)
             query = parse_qs(parsed_url.query)
             return query.get("v", [None])[0]
         elif "youtu.be" in domain:

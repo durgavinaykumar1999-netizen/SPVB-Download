@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends, Header
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -8,6 +8,7 @@ import os
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
 from ..services.cleanup_service import CleanupService
+from ..middleware.device_verification import verify_device_fingerprint
 from ..utils.logger import setup_logger
 from ..config.env import config
 
@@ -58,7 +59,13 @@ async def get_session():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/metadata")
-async def get_metadata(request: MetadataRequest):
+async def get_metadata(
+    request: MetadataRequest,
+    device_verified: bool = Depends(
+        lambda x_device_fingerprint=Header(None, alias="X-Device-Fingerprint"):
+            verify_device_fingerprint(request.session_id, x_device_fingerprint)
+    ),
+):
     try:
         metadata = await download_service.get_metadata(request.url)
 
@@ -71,7 +78,13 @@ async def get_metadata(request: MetadataRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/download")
-async def start_download(request: DownloadRequest):
+async def start_download(
+    request: DownloadRequest,
+    device_verified: bool = Depends(
+        lambda x_device_fingerprint=Header(None, alias="X-Device-Fingerprint"):
+            verify_device_fingerprint(request.session_id, x_device_fingerprint)
+    ),
+):
     try:
         download_id = str(uuid.uuid4())
 
@@ -105,7 +118,13 @@ async def get_download_status(download_id: str, session_id: str = Query(...)):
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.get("/downloads")
-async def list_downloads(session_id: str = Query(...)):
+async def list_downloads(
+    session_id: str = Query(...),
+    device_verified: bool = Depends(
+        lambda x_device_fingerprint=Header(None, alias="X-Device-Fingerprint"):
+            verify_device_fingerprint(session_id, x_device_fingerprint)
+    ),
+):
     try:
         downloads = await download_service.list_downloads(session_id)
 
