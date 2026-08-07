@@ -1,7 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import uuid
+import aiohttp
+import os
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
 from ..utils.logger import setup_logger
@@ -124,6 +127,35 @@ async def download_file(download_id: str, session_id: str = Query(...)):
     except Exception as e:
         logger.error(f"Download file error: {str(e)}")
         raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/download/{download_id}/stream")
+async def stream_download(download_id: str, session_id: str = Query(...)):
+    try:
+        file_url = await download_service.get_download_file(download_id, session_id)
+
+        if not file_url:
+            raise ValueError("File URL not found")
+
+        async def generate():
+            async with aiohttp.ClientSession() as session:
+                async with session.get(file_url) as resp:
+                    if resp.status == 200:
+                        async for chunk in resp.content.iter_chunked(8192):
+                            yield chunk
+                    else:
+                        raise ValueError(f"Failed to fetch file: {resp.status}")
+
+        filename = f"{download_id}.mp4"
+        return StreamingResponse(
+            generate(),
+            media_type="video/mp4",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"Stream download error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/session/save-path")
 async def set_save_path(request: SavePathRequest):
