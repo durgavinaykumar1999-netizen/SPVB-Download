@@ -59,35 +59,21 @@ async def get_session():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/metadata")
-async def get_metadata(
-    request: MetadataRequest,
-    x_device_fingerprint: str = Header(None, alias="X-Device-Fingerprint"),
-):
+async def get_metadata(request: MetadataRequest):
     try:
-        # Verify device fingerprint
-        await verify_device_fingerprint(request.session_id, x_device_fingerprint)
-
         metadata = await download_service.get_metadata(request.url)
 
         return {
             "success": True,
             "metadata": metadata
         }
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Metadata fetch error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.post("/download")
-async def start_download(
-    request: DownloadRequest,
-    x_device_fingerprint: str = Header(None, alias="X-Device-Fingerprint"),
-):
+async def start_download(request: DownloadRequest):
     try:
-        # Verify device fingerprint
-        await verify_device_fingerprint(request.session_id, x_device_fingerprint)
-
         download_id = str(uuid.uuid4())
 
         download = await download_service.queue_download(
@@ -102,8 +88,6 @@ async def start_download(
             "download_id": download_id,
             "status": "queued"
         }
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Download queue error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -122,22 +106,14 @@ async def get_download_status(download_id: str, session_id: str = Query(...)):
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.get("/downloads")
-async def list_downloads(
-    session_id: str = Query(...),
-    x_device_fingerprint: str = Header(None, alias="X-Device-Fingerprint"),
-):
+async def list_downloads(session_id: str = Query(...)):
     try:
-        # Verify device fingerprint
-        await verify_device_fingerprint(session_id, x_device_fingerprint)
-
         downloads = await download_service.list_downloads(session_id)
 
         return {
             "success": True,
             "downloads": downloads
         }
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Downloads list error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))

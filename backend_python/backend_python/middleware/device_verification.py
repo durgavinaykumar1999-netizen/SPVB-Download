@@ -68,10 +68,10 @@ class DeviceVerificationMiddleware:
 
 async def verify_device_fingerprint(
     session_id: str,
-    device_fingerprint: Optional[str] = Header(None, alias="X-Device-Fingerprint"),
+    device_fingerprint: Optional[str],
 ) -> bool:
     """
-    Dependency function for verifying device fingerprint in routes
+    Verify device fingerprint matches session device
     """
     middleware = DeviceVerificationMiddleware()
     return await middleware.verify_device(session_id, device_fingerprint)
