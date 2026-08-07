@@ -33,7 +33,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [message, setMessage] = useState<string>('');
-  const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
+  const [showHistory, setShowHistory] = useState(false);
   const [autoDownloadCompleted, setAutoDownloadCompleted] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -76,10 +76,10 @@ function App() {
       if (data.success) {
         setSessionId(data.session_id);
         localStorage.setItem('spvb_session_id', data.session_id);
-        setMessage('✅ Session ready');
+        setMessage('✅ Ready');
       }
     } catch (error) {
-      setMessage(`❌ Failed to create session: ${error}`);
+      setMessage(`❌ Session failed: ${error}`);
     }
   };
 
@@ -100,9 +100,9 @@ function App() {
       if (data.success) {
         setMetadata(data.metadata);
         setSelectedQuality(data.metadata.qualities[0]?.value?.toString() || 'best');
-        setMessage(`✅ Ready to download`);
+        setMessage(`✅ Ready`);
       } else {
-        setMessage(`❌ ${data.message || 'Failed to fetch metadata'}`);
+        setMessage(`❌ ${data.message || 'Failed'}`);
       }
     } catch (error) {
       setMessage(`❌ Error: ${error}`);
@@ -113,7 +113,7 @@ function App() {
 
   const startDownload = async () => {
     if (!url || !sessionId) {
-      setMessage('❌ Please enter a URL');
+      setMessage('❌ Please enter URL');
       return;
     }
 
@@ -133,7 +133,7 @@ function App() {
         setMessage(`⏳ Downloading...`);
         fetchDownloads();
       } else {
-        setMessage(`❌ ${data.message || 'Failed to start download'}`);
+        setMessage(`❌ ${data.message || 'Failed'}`);
       }
     } catch (error) {
       setMessage(`❌ Error: ${error}`);
@@ -162,7 +162,7 @@ function App() {
       );
 
       if (!res.ok) {
-        throw new Error(`Download failed: ${res.statusText}`);
+        throw new Error(`Download failed`);
       }
 
       const blob = await res.blob();
@@ -178,15 +178,10 @@ function App() {
         document.body.removeChild(link);
       }, 100);
 
-      setMessage(`✅ File saved to Downloads folder`);
+      setMessage(`✅ Download complete!`);
     } catch (error) {
       console.error('Auto-download failed:', error);
     }
-  };
-
-  const manualDownload = async (downloadId: string) => {
-    await triggerAutoDownload(downloadId);
-    setDownloadedIds(new Set([...downloadedIds, downloadId]));
   };
 
   const endSession = async () => {
@@ -205,18 +200,18 @@ function App() {
         setUrl('');
         setMetadata(null);
         setDownloads([]);
+        setShowHistory(false);
         localStorage.removeItem('spvb_session_id');
 
         setTimeout(() => createSession(), 1000);
       }
     } catch (error) {
-      console.error('Failed to end session:', error);
       setMessage(`❌ Error: ${error}`);
     }
   };
 
-  const completedDownloads = downloads.filter((d) => d.status === 'completed');
   const activeDownloads = downloads.filter((d) => d.status !== 'completed');
+  const completedDownloads = downloads.filter((d) => d.status === 'completed');
 
   return (
     <div className="app">
@@ -242,11 +237,19 @@ function App() {
           <div className="session-info">
             <div className="session-status">
               <div className="status-dot"></div>
-              <span>Active Session</span>
+              <span>Active</span>
             </div>
             <code>{sessionId?.substring(0, 10)}...</code>
           </div>
           <div className="session-actions">
+            {completedDownloads.length > 0 && (
+              <button
+                onClick={() => setShowHistory(!showHistory)}
+                className={`btn btn-small ${showHistory ? 'btn-active' : ''}`}
+              >
+                📋 History ({completedDownloads.length})
+              </button>
+            )}
             <button onClick={createSession} className="btn btn-small">
               ↻ New
             </button>
@@ -256,9 +259,10 @@ function App() {
           </div>
         </div>
 
-        {/* DOWNLOAD SECTION */}
+        {/* MAIN CONTENT */}
         <div className="main-content">
-          <div className="download-section">
+          {/* INPUT & METADATA */}
+          <div className="input-section">
             <div className="card input-card">
               <div className="input-group">
                 <input
@@ -344,6 +348,7 @@ function App() {
               </div>
             )}
 
+            {/* ACTIVE DOWNLOADS */}
             {activeDownloads.length > 0 && (
               <div className="card progress-card">
                 <h3>📥 Downloading ({activeDownloads.length})</h3>
@@ -367,32 +372,40 @@ function App() {
             )}
           </div>
 
-          {/* HISTORY SECTION */}
-          {completedDownloads.length > 0 && (
-            <div className="history-section">
-              <div className="card history-card">
-                <h3>✓ Download History</h3>
+          {/* HISTORY MODAL */}
+          {showHistory && completedDownloads.length > 0 && (
+            <div className="history-modal">
+              <div className="history-backdrop" onClick={() => setShowHistory(false)}></div>
+              <div className="history-panel">
+                <div className="history-header">
+                  <h3>✓ Download History</h3>
+                  <button
+                    onClick={() => setShowHistory(false)}
+                    className="btn-close"
+                  >
+                    ✕
+                  </button>
+                </div>
+
                 <div className="history-list">
                   {completedDownloads.map((d) => (
                     <div key={d.download_id} className="history-item">
-                      <div className="history-info">
-                        <div className="checkmark">✓</div>
-                        <div className="history-details">
-                          <p className="history-id">
-                            ID: {d.download_id.substring(0, 8)}
-                          </p>
-                          <p className="history-status">Completed</p>
-                        </div>
+                      <div className="checkmark">✓</div>
+                      <div className="history-details">
+                        <p className="history-id">ID: {d.download_id.substring(0, 8)}</p>
+                        <p className="history-status">Completed</p>
                       </div>
-                      <button
-                        onClick={() => manualDownload(d.download_id)}
-                        className="btn btn-small btn-secondary"
-                      >
-                        ⬇ Download Again
-                      </button>
                     </div>
                   ))}
                 </div>
+
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="btn btn-primary"
+                  style={{ width: '100%', marginTop: '15px' }}
+                >
+                  Close
+                </button>
               </div>
             </div>
           )}
