@@ -36,7 +36,13 @@ function App() {
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    createSession();
+    const savedSessionId = localStorage.getItem('spvb_session_id');
+    if (savedSessionId) {
+      setSessionId(savedSessionId);
+      setMessage('✅ Session restored from last visit');
+    } else {
+      createSession();
+    }
   }, []);
 
   useEffect(() => {
@@ -53,7 +59,8 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setSessionId(data.session_id);
-        setMessage('✅ Session created successfully');
+        localStorage.setItem('spvb_session_id', data.session_id);
+        setMessage('✅ New session created successfully');
       }
     } catch (error) {
       setMessage(`❌ Failed to create session: ${error}`);
@@ -190,6 +197,7 @@ function App() {
         setDownloads([]);
         setDownloadedIds(new Set());
         setDownloadingIds(new Set());
+        localStorage.removeItem('spvb_session_id');
 
         // Create a new session
         setTimeout(() => createSession(), 1000);
