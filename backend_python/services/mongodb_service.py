@@ -1,9 +1,34 @@
 from pymongo import MongoClient
 from datetime import datetime, timedelta
+from bson import ObjectId
 from ..config.env import config
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
+
+def serialize_doc(doc):
+    """Convert MongoDB document to JSON-serializable format"""
+    if doc is None:
+        return None
+    if isinstance(doc, list):
+        return [serialize_doc(d) for d in doc]
+    if isinstance(doc, dict):
+        result = {}
+        for key, value in doc.items():
+            if key == "_id":
+                result["id"] = str(value)
+            elif isinstance(value, ObjectId):
+                result[key] = str(value)
+            elif isinstance(value, datetime):
+                result[key] = value.isoformat()
+            elif isinstance(value, dict):
+                result[key] = serialize_doc(value)
+            elif isinstance(value, list):
+                result[key] = [serialize_doc(item) if isinstance(item, dict) else item for item in value]
+            else:
+                result[key] = value
+        return result
+    return doc
 
 class MongoDBService:
     def __init__(self):
@@ -38,7 +63,7 @@ class MongoDBService:
             self.sessions.insert_one(session)
             logger.info(f"Session created: {session_id}")
 
-            return session
+            return serialize_doc(session)
         except Exception as e:
             logger.error(f"Session creation error: {str(e)}")
             raise
@@ -54,7 +79,7 @@ class MongoDBService:
                 await self.delete_session(session_id)
                 raise ValueError(f"Session expired: {session_id}")
 
-            return session
+            return serialize_doc(session)
         except Exception as e:
             logger.error(f"Get session error: {str(e)}")
             raise
@@ -99,7 +124,7 @@ class MongoDBService:
             self.downloads.insert_one(download)
             logger.info(f"Download created: {download_id}")
 
-            return download
+            return serialize_doc(download)
         except Exception as e:
             logger.error(f"Download creation error: {str(e)}")
             raise
@@ -111,7 +136,7 @@ class MongoDBService:
             if not download:
                 raise ValueError(f"Download not found: {download_id}")
 
-            return download
+            return serialize_doc(download)
         except Exception as e:
             logger.error(f"Get download error: {str(e)}")
             raise
@@ -130,7 +155,7 @@ class MongoDBService:
     async def list_downloads(self, session_id: str):
         try:
             downloads = list(self.downloads.find({"session_id": session_id}))
-            return downloads
+            return [serialize_doc(d) for d in downloads]
         except Exception as e:
             logger.error(f"List downloads error: {str(e)}")
             raise
