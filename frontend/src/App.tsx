@@ -34,13 +34,13 @@ function App() {
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [message, setMessage] = useState<string>('');
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
-  const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
+  const [autoDownloadCompleted, setAutoDownloadCompleted] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const savedSessionId = localStorage.getItem('spvb_session_id');
     if (savedSessionId) {
       setSessionId(savedSessionId);
-      setMessage('✅ Session restored from last visit');
+      setMessage('✅ Session restored');
     } else {
       createSession();
     }
@@ -54,6 +54,21 @@ function App() {
     return () => clearInterval(interval);
   }, [sessionId]);
 
+  // Auto-download when download completes
+  useEffect(() => {
+    downloads.forEach((d) => {
+      if (
+        d.status === 'completed' &&
+        !autoDownloadCompleted.has(d.download_id)
+      ) {
+        setAutoDownloadCompleted(
+          new Set([...autoDownloadCompleted, d.download_id])
+        );
+        triggerAutoDownload(d.download_id);
+      }
+    });
+  }, [downloads, autoDownloadCompleted]);
+
   const createSession = async () => {
     try {
       const res = await fetch(`${apiUrl}/api/session`);
@@ -61,7 +76,7 @@ function App() {
       if (data.success) {
         setSessionId(data.session_id);
         localStorage.setItem('spvb_session_id', data.session_id);
-        setMessage('✅ New session created successfully');
+        setMessage('✅ Session ready');
       }
     } catch (error) {
       setMessage(`❌ Failed to create session: ${error}`);
@@ -70,7 +85,7 @@ function App() {
 
   const fetchMetadata = async () => {
     if (!url || !sessionId) {
-      setMessage('❌ Please enter a URL and have an active session');
+      setMessage('❌ Please enter a URL');
       return;
     }
 
@@ -85,12 +100,12 @@ function App() {
       if (data.success) {
         setMetadata(data.metadata);
         setSelectedQuality(data.metadata.qualities[0]?.value?.toString() || 'best');
-        setMessage(`✅ Metadata loaded: ${data.metadata.title}`);
+        setMessage(`✅ Ready to download`);
       } else {
         setMessage(`❌ ${data.message || 'Failed to fetch metadata'}`);
       }
     } catch (error) {
-      setMessage(`❌ Error fetching metadata: ${error}`);
+      setMessage(`❌ Error: ${error}`);
     } finally {
       setLoading(false);
     }
@@ -115,13 +130,13 @@ function App() {
       });
       const data = await res.json();
       if (data.success) {
-        setMessage(`✅ Download started!`);
+        setMessage(`⏳ Downloading...`);
         fetchDownloads();
       } else {
         setMessage(`❌ ${data.message || 'Failed to start download'}`);
       }
     } catch (error) {
-      setMessage(`❌ Error starting download: ${error}`);
+      setMessage(`❌ Error: ${error}`);
     } finally {
       setLoading(false);
     }
@@ -140,11 +155,8 @@ function App() {
     }
   };
 
-  const downloadFile = async (downloadId: string) => {
+  const triggerAutoDownload = async (downloadId: string) => {
     try {
-      setMessage(`⏳ Processing download...`);
-      setDownloadingIds(new Set([...downloadingIds, downloadId]));
-
       const res = await fetch(
         `${apiUrl}/api/download/${downloadId}/stream?session_id=${sessionId}`
       );
@@ -166,23 +178,20 @@ function App() {
         document.body.removeChild(link);
       }, 100);
 
-      setDownloadedIds(new Set([...downloadedIds, downloadId]));
-      setMessage(`✅ Download complete! Check your Downloads folder.`);
+      setMessage(`✅ File saved to Downloads folder`);
     } catch (error) {
-      console.error('Failed to download file:', error);
-      setMessage(`❌ Download error: ${error}`);
-    } finally {
-      setDownloadingIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(downloadId);
-        return newSet;
-      });
+      console.error('Auto-download failed:', error);
     }
+  };
+
+  const manualDownload = async (downloadId: string) => {
+    await triggerAutoDownload(downloadId);
+    setDownloadedIds(new Set([...downloadedIds, downloadId]));
   };
 
   const endSession = async () => {
     try {
-      setMessage(`⏳ Ending session and cleaning up...`);
+      setMessage(`🔄 Ending session...`);
 
       const res = await fetch(
         `${apiUrl}/api/session/end?session_id=${sessionId}`,
@@ -191,23 +200,23 @@ function App() {
 
       const data = await res.json();
       if (data.success) {
-        setMessage(`✅ ${data.message}`);
+        setMessage(`✅ Session ended`);
         setSessionId('');
         setUrl('');
         setMetadata(null);
         setDownloads([]);
-        setDownloadedIds(new Set());
-        setDownloadingIds(new Set());
         localStorage.removeItem('spvb_session_id');
 
-        // Create a new session
         setTimeout(() => createSession(), 1000);
       }
     } catch (error) {
       console.error('Failed to end session:', error);
-      setMessage(`❌ Error ending session: ${error}`);
+      setMessage(`❌ Error: ${error}`);
     }
   };
+
+  const completedDownloads = downloads.filter((d) => d.status === 'completed');
+  const activeDownloads = downloads.filter((d) => d.status !== 'completed');
 
   return (
     <div className="app">
@@ -223,189 +232,176 @@ function App() {
         </header>
 
         {message && (
-          <div className={`message ${message.includes('✅') ? 'success' : 'error'}`}>
-            <span className="message-icon">{message.includes('✅') ? '✓' : '✕'}</span>
+          <div className={`message ${message.includes('✅') || message.includes('⏳') ? 'success' : 'error'}`}>
+            <span className="message-icon">{message.includes('❌') ? '✕' : '✓'}</span>
             {message}
           </div>
         )}
 
-        <div className="card session-card">
-          <div className="session-header">
+        <div className="session-controls">
+          <div className="session-info">
             <div className="session-status">
               <div className="status-dot"></div>
-              <span>Session Active</span>
+              <span>Active Session</span>
             </div>
-            <code className="session-id">{sessionId?.substring(0, 12)}...</code>
+            <code>{sessionId?.substring(0, 10)}...</code>
           </div>
           <div className="session-actions">
-            <button onClick={createSession} className="btn btn-secondary">
-              <span className="btn-icon">↻</span>
-              New Session
+            <button onClick={createSession} className="btn btn-small">
+              ↻ New
             </button>
-            <button onClick={endSession} className="btn btn-end-session">
-              <span className="btn-icon">✕</span>
-              End & Cleanup
+            <button onClick={endSession} className="btn btn-small btn-danger">
+              ✕ End
             </button>
           </div>
         </div>
 
-        <div className="card input-card">
-          <div className="input-group">
-            <input
-              type="text"
-              placeholder="Paste your video URL here..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="input-url"
-              onKeyDown={(e) => e.key === 'Enter' && fetchMetadata()}
-            />
-            <button
-              onClick={fetchMetadata}
-              disabled={loading || !url}
-              className="btn btn-primary"
-            >
-              <span className="btn-icon">🔍</span>
-              {loading ? 'Scanning...' : 'Get Info'}
-            </button>
-          </div>
-        </div>
-
-        {metadata && (
-          <div className="card metadata-card">
-            <div className="metadata-header">
-              <div className="platform-badge">{metadata.platform.toUpperCase()}</div>
-            </div>
-            <div className="metadata-content">
-              {metadata.thumbnail && (
-                <div className="thumbnail-container">
-                  <img
-                    src={metadata.thumbnail}
-                    alt={metadata.title}
-                    className="thumbnail"
-                  />
-                  <div className="duration-badge">
-                    {Math.floor(metadata.duration / 60)}m
-                  </div>
-                </div>
-              )}
-              <div className="metadata-info">
-                <h2>{metadata.title}</h2>
-                {metadata.uploader && (
-                  <p className="uploader">
-                    <span className="uploader-icon">👤</span> {metadata.uploader}
-                  </p>
-                )}
-
-                {metadata.is_age_restricted && (
-                  <div className="warning-badge">
-                    <span className="warning-icon">⚠</span> Age-Restricted Content
-                  </div>
-                )}
-
-                <div className="quality-section">
-                  <label className="quality-label">Select Quality</label>
-                  <select
-                    value={selectedQuality}
-                    onChange={(e) => setSelectedQuality(e.target.value)}
-                    className="quality-select"
-                  >
-                    {metadata.qualities.map((q, idx) => (
-                      <option key={idx} value={q.value}>
-                        {q.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
+        {/* DOWNLOAD SECTION */}
+        <div className="main-content">
+          <div className="download-section">
+            <div className="card input-card">
+              <div className="input-group">
+                <input
+                  type="text"
+                  placeholder="Paste video URL here..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="input-url"
+                  onKeyDown={(e) => e.key === 'Enter' && fetchMetadata()}
+                />
                 <button
-                  onClick={startDownload}
-                  disabled={loading}
-                  className="btn btn-download-large"
+                  onClick={fetchMetadata}
+                  disabled={loading || !url}
+                  className="btn btn-primary"
                 >
-                  <span className="btn-icon">⬇</span>
-                  {loading ? 'Initiating Download...' : 'Start Download'}
+                  <span className="btn-icon">🔍</span>
+                  Get Info
                 </button>
               </div>
             </div>
-          </div>
-        )}
 
-        {downloads.length > 0 && (
-          <div className="card downloads-card">
-            <div className="downloads-header">
-              <h3>📥 Download Queue</h3>
-              <span className="download-count">{downloads.length}</span>
-            </div>
-            <div className="downloads-list">
-              {downloads.map((d) => (
-                <div
-                  key={d.download_id}
-                  className={`download-item download-${d.status}`}
-                >
-                  <div className="download-header">
-                    <div className="download-status-badge">
-                      {d.status === 'completed' && '✓ Completed'}
-                      {d.status === 'downloading' && '⟳ Downloading'}
-                      {d.status === 'queued' && '⋯ Queued'}
-                      {d.status === 'failed' && '✕ Failed'}
-                    </div>
-                    <code className="download-id">
-                      {d.download_id.substring(0, 8)}
-                    </code>
-                  </div>
-
-                  {d.progress > 0 && d.status === 'downloading' && (
-                    <div className="progress-section">
-                      <div className="progress-bar-container">
-                        <div className="progress-bar">
-                          <div
-                            className="progress-fill"
-                            style={{ width: `${d.progress}%` }}
-                          >
-                            <span className="progress-text">{d.progress}%</span>
-                          </div>
+            {metadata && (
+              <div className="card metadata-card">
+                <div className="metadata-container">
+                  {metadata.thumbnail && (
+                    <div className="thumbnail-container">
+                      <img
+                        src={metadata.thumbnail}
+                        alt={metadata.title}
+                        className="thumbnail"
+                      />
+                      <div className="overlay">
+                        <div className="platform-badge">
+                          {metadata.platform.toUpperCase()}
+                        </div>
+                        <div className="duration-badge">
+                          ⏱ {Math.floor(metadata.duration / 60)}m
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {d.error && (
-                    <div className="error-message">
-                      <span className="error-icon">⚠</span> {d.error}
-                    </div>
-                  )}
+                  <div className="metadata-details">
+                    <h2 className="video-title">{metadata.title}</h2>
 
-                  {d.status === 'completed' && (
-                    <div className="download-actions">
-                      {downloadingIds.has(d.download_id) ? (
-                        <div className="downloading-indicator">
-                          <div className="spinner"></div>
-                          <span>Processing...</span>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => downloadFile(d.download_id)}
-                          className="btn btn-download-action"
-                        >
-                          <span className="btn-icon">⬇</span>
-                          {downloadedIds.has(d.download_id) ? 'Retry Download' : 'Download Now'}
-                        </button>
-                      )}
+                    {metadata.uploader && (
+                      <p className="uploader">
+                        <span>👤</span> {metadata.uploader}
+                      </p>
+                    )}
+
+                    {metadata.is_age_restricted && (
+                      <div className="warning">
+                        <span>⚠</span> Age-Restricted
+                      </div>
+                    )}
+
+                    <div className="quality-group">
+                      <label>Quality</label>
+                      <select
+                        value={selectedQuality}
+                        onChange={(e) => setSelectedQuality(e.target.value)}
+                        className="quality-select"
+                      >
+                        {metadata.qualities.map((q, idx) => (
+                          <option key={idx} value={q.value}>
+                            {q.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
-                  )}
+
+                    <button
+                      onClick={startDownload}
+                      disabled={loading}
+                      className="btn btn-download"
+                    >
+                      <span className="btn-icon">⬇</span>
+                      {loading ? 'Processing...' : 'Start Download'}
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        <footer className="footer">
-          <div className="footer-content">
-            <p>🔐 All downloads are session-based and private</p>
-            <p>⏱ Sessions auto-cleanup after 30 minutes</p>
+            {activeDownloads.length > 0 && (
+              <div className="card progress-card">
+                <h3>📥 Downloading ({activeDownloads.length})</h3>
+                <div className="progress-list">
+                  {activeDownloads.map((d) => (
+                    <div key={d.download_id} className="progress-item">
+                      <div className="progress-info">
+                        <span className="status-badge">⟳ {d.status.toUpperCase()}</span>
+                        <span className="progress-percent">{d.progress}%</span>
+                      </div>
+                      <div className="progress-bar-container">
+                        <div className="progress-bar">
+                          <div className="progress-fill" style={{ width: `${d.progress}%` }} />
+                        </div>
+                      </div>
+                      {d.error && <p className="error-text">❌ {d.error}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </footer>
+
+          {/* HISTORY SECTION */}
+          {completedDownloads.length > 0 && (
+            <div className="history-section">
+              <div className="card history-card">
+                <h3>✓ Download History</h3>
+                <div className="history-list">
+                  {completedDownloads.map((d) => (
+                    <div key={d.download_id} className="history-item">
+                      <div className="history-info">
+                        <div className="checkmark">✓</div>
+                        <div className="history-details">
+                          <p className="history-id">
+                            ID: {d.download_id.substring(0, 8)}
+                          </p>
+                          <p className="history-status">Completed</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => manualDownload(d.download_id)}
+                        className="btn btn-small btn-secondary"
+                      >
+                        ⬇ Download Again
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      <footer className="footer">
+        <p>🔐 Session-based • Auto-cleanup after 30 minutes • No login required</p>
+      </footer>
     </div>
   );
 }
