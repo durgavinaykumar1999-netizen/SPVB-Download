@@ -1,6 +1,4 @@
-import re
-import os
-import aiohttp
+import yt_dlp
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
@@ -8,188 +6,98 @@ logger = setup_logger()
 class TikTokProvider:
     def __init__(self):
         self.platform = "tiktok"
-        self.api_url = "https://www.tiktok.com/api/v1/video"
 
-    def _extract_video_id(self, url: str) -> str:
-        """Extract TikTok video ID from URL"""
-        patterns = [
-            r'tiktok\.com/@[\w.-]+/video/(\d+)',
-            r'vm\.tiktok\.com/(\w+)',
-            r'vt\.tiktok\.com/(\w+)',
-            r'tiktok\.com/v/(\d+)',
-        ]
+    def _get_ydl_opts(self, download: bool = False, save_path: str = None):
+        """Get yt-dlp options optimized for TikTok"""
+        opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_unavailable_fragments': True,
+            'socket_timeout': 30,
+            'cookiefile': None,
+        }
 
-        for pattern in patterns:
-            match = re.search(pattern, url)
-            if match:
-                return match.group(1)
+        if download and save_path:
+            opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
 
-        raise ValueError(f"Could not extract TikTok video ID from URL: {url}")
+        return opts
 
     async def get_metadata(self, url: str):
-        """Get TikTok video metadata without authentication"""
+        """Extract TikTok metadata using yt-dlp"""
         try:
-            video_id = self._extract_video_id(url)
-            logger.info(f"Extracted TikTok video ID: {video_id}")
+            ydl_opts = self._get_ydl_opts(download=False)
 
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://www.tiktok.com/',
-            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info = ydl.extract_info(url, download=False)
+                except yt_dlp.utils.DownloadError as e:
+                    logger.warning(f"First attempt failed: {str(e)}, retrying...")
+                    info = ydl.extract_info(url, download=False)
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=10) as resp:
-                    if resp.status != 200:
-                        raise ValueError(f"Failed to fetch TikTok page: {resp.status}")
+                formats = info.get('formats', [])
+                qualities = []
 
-                    html = await resp.text()
+                for fmt in formats:
+                    if fmt.get('height'):
+                        height = fmt.get('height')
+                        if height not in [q['value'] for q in qualities]:
+                            qualities.append({
+                                'label': f"{height}p",
+                                'value': height
+                            })
 
-                    title = self._extract_title(html)
-                    thumbnail = self._extract_thumbnail(html)
-                    duration = self._extract_duration(html)
+                qualities = sorted(qualities, key=lambda x: x['value'], reverse=True)
 
-                    return {
-                        'title': title or 'TikTok Video',
-                        'duration': duration or 30,
-                        'thumbnail': thumbnail or '',
-                        'uploader': 'TikTok User',
-                        'qualities': [
-                            {'label': 'best', 'value': 'best'},
-                            {'label': '720p', 'value': '720'},
-                            {'label': '480p', 'value': '480'},
-                        ],
-                        'platform': self.platform,
-                        'video_id': video_id
-                    }
+                return {
+                    'title': info.get('title', 'TikTok Video'),
+                    'duration': info.get('duration', 0),
+                    'thumbnail': info.get('thumbnail', ''),
+                    'uploader': info.get('uploader', 'TikTok User'),
+                    'qualities': qualities if qualities else [{'label': 'best', 'value': 'best'}],
+                    'platform': self.platform
+                }
         except Exception as e:
             logger.error(f"TikTok metadata error: {str(e)}")
             raise
 
-    def _extract_title(self, html: str) -> str:
-        """Extract video title from HTML"""
-        try:
-            match = re.search(r'<title>([^<]+)</title>', html)
-            if match:
-                return match.group(1).replace(' | TikTok', '').strip()
-        except:
-            pass
-        return 'TikTok Video'
-
-    def _extract_thumbnail(self, html: str) -> str:
-        """Extract thumbnail URL from HTML"""
-        try:
-            patterns = [
-                r'"coverMid":"([^"]+)"',
-                r'"dynamicCover":"([^"]+)"',
-                r'property="og:image" content="([^"]+)"',
-            ]
-            for pattern in patterns:
-                match = re.search(pattern, html)
-                if match:
-                    return match.group(1)
-        except:
-            pass
-        return ''
-
-    def _extract_duration(self, html: str) -> int:
-        """Extract video duration from HTML"""
-        try:
-            match = re.search(r'"duration":(\d+)', html)
-            if match:
-                return int(match.group(1))
-        except:
-            pass
-        return 30
-
     async def download(self, url: str, quality: str, save_path: str):
-        """Download TikTok video without authentication"""
+        """Download TikTok video using yt-dlp (handles auth/tokens internally)"""
         try:
-            video_id = self._extract_video_id(url)
-            logger.info(f"Downloading TikTok video: {video_id}")
+            quality_value = 'best' if quality == 'best' else f'bestvideo[height<={quality}]+bestaudio/best'
 
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://www.tiktok.com/',
-            }
+            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path)
+            ydl_opts['format'] = quality_value
 
-            download_url = await self._get_download_url(url, headers)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                try:
+                    info = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info)
 
-            if not download_url:
-                raise ValueError("Could not extract download URL from TikTok")
+                    logger.info(f"Successfully downloaded TikTok: {info.get('title', '')}")
 
-            os.makedirs(save_path, exist_ok=True)
+                    return {
+                        'success': True,
+                        'filename': filename,
+                        'title': info.get('title', ''),
+                        'format': info.get('ext', 'mp4')
+                    }
+                except yt_dlp.utils.DownloadError as e:
+                    logger.warning(f"Download with quality {quality} failed: {str(e)}, using best available...")
+                    # Fallback to best quality
+                    ydl_opts['format'] = 'best'
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_fallback:
+                        info = ydl_fallback.extract_info(url, download=True)
+                        filename = ydl_fallback.prepare_filename(info)
 
-            filename = os.path.join(save_path, f"tiktok_{video_id}.mp4")
+                        logger.info(f"Downloaded with fallback quality: {info.get('title', '')}")
 
-            async with aiohttp.ClientSession() as session:
-                async with session.get(download_url, headers=headers, timeout=30) as resp:
-                    if resp.status != 200:
-                        raise ValueError(f"Failed to download video: {resp.status}")
-
-                    with open(filename, 'wb') as f:
-                        async for chunk in resp.content.iter_chunked(8192):
-                            f.write(chunk)
-
-            logger.info(f"TikTok video downloaded successfully: {filename}")
-
-            return {
-                'success': True,
-                'filename': filename,
-                'title': f'TikTok_{video_id}',
-                'format': 'mp4'
-            }
-
+                        return {
+                            'success': True,
+                            'filename': filename,
+                            'title': info.get('title', ''),
+                            'format': info.get('ext', 'mp4'),
+                            'note': 'Downloaded with best available quality'
+                        }
         except Exception as e:
             logger.error(f"TikTok download error: {str(e)}")
-            raise
-
-    async def _get_download_url(self, url: str, headers: dict) -> str:
-        """Extract download URL from TikTok video page"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, timeout=10) as resp:
-                    html = await resp.text()
-
-                    patterns = [
-                        r'"playAddr":"([^"]+)"',
-                        r'"downloadAddr":"([^"]+)"',
-                        r'"videoUrl":"([^"]+)"',
-                    ]
-
-                    for pattern in patterns:
-                        match = re.search(pattern, html)
-                        if match:
-                            download_url = match.group(1)
-                            download_url = download_url.replace('\\/', '/')
-                            return download_url
-
-                    logger.warning("Could not find download URL in HTML, trying alternative method...")
-                    return await self._get_download_url_api(url)
-
-        except Exception as e:
-            logger.error(f"Error extracting download URL: {str(e)}")
-            raise
-
-    async def _get_download_url_api(self, url: str) -> str:
-        """Alternative method using TikTok API endpoint"""
-        try:
-            video_id = self._extract_video_id(url)
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Referer': 'https://www.tiktok.com/',
-            }
-
-            api_url = f"https://api.tiktok.com/v1/video/query/?aweme_id={video_id}"
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, headers=headers, timeout=10) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if data.get('data', {}).get('video', {}).get('downloadAddr'):
-                            return data['data']['video']['downloadAddr']
-
-            raise ValueError("Could not get download URL from API")
-
-        except Exception as e:
-            logger.error(f"TikTok API error: {str(e)}")
             raise
