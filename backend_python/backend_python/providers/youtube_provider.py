@@ -1,4 +1,5 @@
 import yt_dlp
+import os
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
@@ -15,63 +16,75 @@ class YouTubeProvider:
             return f"https://www.youtube.com/watch?v={video_id}"
         return url
 
-    def _get_ydl_opts(self, download: bool = False, save_path: str = None, skip_extraction: bool = True):
-        """Get yt-dlp options optimized for downloads"""
+    def _get_ydl_opts(self, download: bool = False, save_path: str = None, use_cookies: bool = True):
+        """Get yt-dlp options with proper authentication handling"""
         opts = {
-            'quiet': True,
-            'no_warnings': True,
+            'quiet': False,
+            'no_warnings': False,
             'skip_unavailable_fragments': True,
             'socket_timeout': 30,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
             },
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['web', 'android'],
+                    'player_skip_js_player': False,
+                }
+            },
+            'retries': 5,
+            'fragment_retries': 5,
+            'skip_unavailable_fragments': True,
+            'keep_fragments': False,
         }
 
-        # Use better extraction with client options
-        if not skip_extraction:
-            opts['extractor_args'] = {
-                'youtube': {
-                    'player_client': ['web'],
-                }
-            }
-        else:
-            opts['extractor_args'] = {
-                'youtube': {
-                    'player_client': ['web'],
-                    'skip': ['webpage'],
-                }
-            }
+        # Try to use cookies from browser if available
+        if use_cookies:
+            opts['cookiesfrombrowser'] = 'chrome'  # Try to extract from Chrome
 
         if download and save_path:
             opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
+            opts['quiet'] = True  # Only show warnings for downloads
+            opts['no_warnings'] = False
 
         return opts
 
     async def get_metadata(self, url: str):
-        """Extract metadata - handles bot detection gracefully"""
+        """Extract metadata with browser cookie support"""
         try:
             # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
 
-            # Try with web client first
-            ydl_opts = self._get_ydl_opts(download=False, skip_extraction=False)
+            # Try with browser cookies first
+            ydl_opts = self._get_ydl_opts(download=False, use_cookies=True)
             info = None
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
                     info = ydl.extract_info(url, download=False)
+                    logger.info(f"Metadata extracted successfully with cookies")
                 except yt_dlp.utils.DownloadError as e:
-                    if "Sign in to confirm" in str(e) or "bot" in str(e).lower():
-                        logger.warning(f"YouTube bot detection triggered: {str(e)}")
+                    error_msg = str(e)
+                    if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
+                        logger.warning(f"Bot detection - trying without cookies: {error_msg}")
                     else:
-                        logger.warning(f"Extraction failed: {str(e)}, retrying...")
+                        logger.warning(f"Extraction failed: {error_msg}")
 
-            # Fallback: retry with different options
+            # Fallback: try without cookies requirement
             if info is None:
-                ydl_opts = self._get_ydl_opts(download=False, skip_extraction=True)
+                logger.info("Retrying without strict cookie requirement...")
+                ydl_opts = self._get_ydl_opts(download=False, use_cookies=False)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
+                    try:
+                        info = ydl.extract_info(url, download=False)
+                        logger.info("Metadata extracted with fallback method")
+                    except Exception as e2:
+                        logger.error(f"All extraction methods failed: {str(e2)}")
+                        raise
 
             formats = info.get('formats', [])
             qualities = []
@@ -102,7 +115,7 @@ class YouTubeProvider:
             raise
 
     async def download(self, url: str, quality: str, save_path: str):
-        """Download YouTube video - handles bot detection and quality fallbacks"""
+        """Download YouTube video with cookie support and fallback methods"""
         try:
             # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
@@ -113,8 +126,8 @@ class YouTubeProvider:
             else:
                 quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
 
-            # Try with web client extraction
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=False)
+            # Try with browser cookies first
+            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=True)
             ydl_opts['format'] = quality_value
             download_succeeded = False
 
@@ -124,7 +137,7 @@ class YouTubeProvider:
                     filename = ydl.prepare_filename(info)
                     download_succeeded = True
 
-                    logger.info(f"Successfully downloaded: {info.get('title', '')} at quality {quality}")
+                    logger.info(f"✅ Downloaded: {info.get('title', '')} at quality {quality}")
 
                     return {
                         'success': True,
@@ -135,13 +148,14 @@ class YouTubeProvider:
                 except yt_dlp.utils.DownloadError as e:
                     error_msg = str(e)
                     if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-                        logger.warning(f"YouTube bot detection - video may require login: {error_msg}")
+                        logger.warning(f"⚠️ Bot detection triggered, trying alternative method...")
                     else:
-                        logger.warning(f"Download with quality {quality} failed: {error_msg}, trying alternatives...")
+                        logger.warning(f"Download failed: {error_msg}, trying alternatives...")
 
-            # Fallback: try with different extraction
+            # Fallback: try without strict cookie requirement
             if not download_succeeded:
-                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=True)
+                logger.info("Attempting fallback download without cookie requirement...")
+                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
                 ydl_opts['format'] = quality_value
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
                     try:
@@ -149,7 +163,7 @@ class YouTubeProvider:
                         filename = ydl_retry.prepare_filename(info)
                         download_succeeded = True
 
-                        logger.info(f"Downloaded after retry: {info.get('title', '')}")
+                        logger.info(f"✅ Downloaded with fallback: {info.get('title', '')}")
 
                         return {
                             'success': True,
@@ -157,25 +171,27 @@ class YouTubeProvider:
                             'title': info.get('title', ''),
                             'format': info.get('ext', 'mp4')
                         }
-                    except yt_dlp.utils.DownloadError:
-                        logger.warning(f"Download with quality {quality} still failed, using best available...")
+                    except yt_dlp.utils.DownloadError as e2:
+                        logger.warning(f"Fallback failed, trying best quality...")
 
             # Final fallback to best available quality
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=False)
-            ydl_opts['format'] = 'best'
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl_fallback:
-                info = ydl_fallback.extract_info(url, download=True)
-                filename = ydl_fallback.prepare_filename(info)
+            if not download_succeeded:
+                logger.info("Using best available quality fallback...")
+                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
+                ydl_opts['format'] = 'best'
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl_fallback:
+                    info = ydl_fallback.extract_info(url, download=True)
+                    filename = ydl_fallback.prepare_filename(info)
 
-                logger.info(f"Downloaded with best available quality: {info.get('title', '')}")
+                    logger.info(f"✅ Downloaded with best quality: {info.get('title', '')}")
 
-                return {
-                    'success': True,
-                    'filename': filename,
-                    'title': info.get('title', ''),
-                    'format': info.get('ext', 'mp4'),
-                    'note': 'Downloaded with best available quality due to restrictions'
-                }
+                    return {
+                        'success': True,
+                        'filename': filename,
+                        'title': info.get('title', ''),
+                        'format': info.get('ext', 'mp4'),
+                        'note': 'Downloaded with best available quality'
+                    }
         except Exception as e:
-            logger.error(f"YouTube download error: {str(e)}")
+            logger.error(f"❌ YouTube download error: {str(e)}")
             raise
