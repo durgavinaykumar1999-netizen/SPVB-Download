@@ -38,7 +38,8 @@
       "Bash(git commit -m 'Major UI redesign + Fix pytubefix incompatibility *)",
       "Bash(git commit -m 'Remove unused variables from App.tsx *)",
       "Bash(git commit -m 'Fix Pydantic validation error for user_cookies parameter *)",
-      "Bash(git commit -m 'Redesign frontend with SPVB Downloader spec design *)"
+      "Bash(git commit -m 'Redesign frontend with SPVB Downloader spec design *)",
+      "Bash(git commit -m 'Fix TypeScript compilation errors and ESLint warnings *)"
     ]
   }
 }

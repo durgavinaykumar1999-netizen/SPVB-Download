@@ -103,14 +103,13 @@ function App() {
   const [url, setUrl] = useState<string>('');
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [selectedQuality, setSelectedQuality] = useState<string>('best');
-  const [loading, setLoading] = useState(false);
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [userCookies, setUserCookies] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'result' | 'error'>('idle');
   const [downloadState, setDownloadState] = useState<string | null>(null);
-  const debounceRef = useRef<NodeJS.Timeout>();
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
 
   const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
@@ -177,7 +176,7 @@ function App() {
   }, [sessionId, fetchDownloads]);
 
   useEffect(() => {
-    clearTimeout(debounceRef.current);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!url) {
       setValidation(null);
       return;
@@ -190,7 +189,9 @@ function App() {
       const platform = detectPlatform(url);
       setValidation(platform ? 'valid' : 'unsupported');
     }, 350);
-    return () => clearTimeout(debounceRef.current);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [url]);
 
   const fetchMetadata = async () => {
@@ -592,7 +593,7 @@ function HistorySection({ history, onRedownload, onDelete }: any) {
           <p>📭 No downloads yet</p>
         </div>
       ) : (
-        history.map(item => (
+        history.map((item: HistoryItem) => (
           <div key={item.id} className="history-card">
             {item.thumbnail && <img src={item.thumbnail} alt={item.title} className="history-thumbnail" />}
             <div className="history-info">
@@ -652,9 +653,9 @@ function Footer() {
       <p>🔒 Session-based · Temporary processing · Auto cleanup · No login required</p>
       <p>
         © 2026 SPVB Downloader. All rights reserved. ·
-        <a href="#">Privacy Policy</a> ·
-        <a href="#">Terms of Service</a> ·
-        <a href="#">Contact Us</a>
+        <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Privacy Policy</button> ·
+        <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Terms of Service</button> ·
+        <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Contact Us</button>
       </p>
     </footer>
   );
