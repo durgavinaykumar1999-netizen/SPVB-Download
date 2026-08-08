@@ -105,11 +105,13 @@ class YouTubeProvider:
     async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         """Download YouTube video using yt-dlp with user's YouTube cookies"""
         try:
+            is_short = "/shorts/" in url
             url = self._normalize_url(url)
 
             # Format string for quality selection
+            # Shorts might have limited formats, so use fallback options
             if quality == 'best':
-                quality_value = 'bestvideo+bestaudio/best'
+                quality_value = 'bestvideo+bestaudio/best' if not is_short else 'best'
             else:
                 quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
 
@@ -118,8 +120,19 @@ class YouTubeProvider:
             ydl_opts['format'] = quality_value
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
+                try:
+                    info = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info)
+                except Exception as e:
+                    # Fallback for Shorts with limited format options
+                    if is_short:
+                        logger.warning(f"Retrying Shorts download with best format: {str(e)}")
+                        ydl_opts['format'] = 'best'
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
+                            info = ydl_retry.extract_info(url, download=True)
+                            filename = ydl_retry.prepare_filename(info)
+                    else:
+                        raise
 
                 logger.info(f"✅ YouTube download: {info.get('title', '')}")
 

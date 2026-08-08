@@ -147,13 +147,10 @@ function App() {
       createSession();
     }
 
-    // Try to extract YouTube cookies from browser
+    // Try to extract YouTube cookies from browser (silently)
     const cookies = extractYouTubeCookies();
     if (cookies) {
       setUserCookies(cookies);
-      setMessage('✅ YouTube login detected - will use your account for downloads');
-    } else {
-      setMessage('⚠️ Not logged into YouTube - please log in for better download success');
     }
   }, [createSession]);
 
