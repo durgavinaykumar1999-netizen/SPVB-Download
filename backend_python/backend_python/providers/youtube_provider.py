@@ -4,19 +4,23 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Try to import pytube/pytubefix for YouTube (no cookies needed)
+# Try to import pytube for YouTube (no cookies needed)
+PYTUBE_AVAILABLE = False
+PytubeYouTube = None
+
 try:
     from pytube import YouTube as PytubeYouTube
     PYTUBE_AVAILABLE = True
     logger.info("✅ pytube available - will use as primary YouTube provider (NO COOKIES NEEDED)")
-except ImportError:
+except Exception as e:
+    logger.warning(f"⚠️ pytube import failed ({str(e)}) - will use yt-dlp with cookies")
     try:
         from pytubefix import YouTube as PytubeYouTube
         PYTUBE_AVAILABLE = True
         logger.info("✅ pytubefix available - will use as primary YouTube provider (NO COOKIES NEEDED)")
-    except ImportError:
+    except Exception as e2:
+        logger.warning(f"⚠️ pytubefix also unavailable ({str(e2)}) - falling back to yt-dlp only")
         PYTUBE_AVAILABLE = False
-        logger.warning("⚠️ pytube/pytubefix not installed - using yt-dlp with cookies")
 
 
 class YouTubeProvider:
@@ -75,7 +79,7 @@ class YouTubeProvider:
             url = self._normalize_url(url)
 
             # Try pytube first (no cookies needed)
-            if PYTUBE_AVAILABLE:
+            if PYTUBE_AVAILABLE and PytubeYouTube:
                 try:
                     logger.info("📺 Trying pytube (no cookies needed)...")
                     yt = PytubeYouTube(url)
@@ -172,7 +176,7 @@ class YouTubeProvider:
             url = self._normalize_url(url)
 
             # Try pytube first (no cookies needed)
-            if PYTUBE_AVAILABLE:
+            if PYTUBE_AVAILABLE and PytubeYouTube:
                 try:
                     logger.info(f"📺 Downloading with pytube (no cookies)...")
                     yt = PytubeYouTube(url)
