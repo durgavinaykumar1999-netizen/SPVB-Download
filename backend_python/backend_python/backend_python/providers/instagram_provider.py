@@ -94,11 +94,18 @@ class InstagramProvider:
 
     async def download(self, url: str, quality: str, save_path: str):
         try:
-            quality_value = 'best' if quality == 'best' else f'bestvideo[height={quality}]'
+            if quality == 'best':
+                quality_value = 'bestvideo+bestaudio/best'
+            else:
+                quality_value = f'bestvideo[height={quality}]+bestaudio/best'
 
             ydl_opts = {
                 'format': quality_value,
                 'outtmpl': f"{save_path}/%(title)s.%(ext)s",
+                'postprocessors': [{
+                    'key': 'FFmpegVideoConvertor',
+                    'preferedformat': 'mp4',
+                }],
                 'quiet': True,
                 'no_warnings': True,
             }
