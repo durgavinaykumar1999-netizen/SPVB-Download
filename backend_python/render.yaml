@@ -3,4 +3,4 @@ services:
     name: spvb-downloader
     runtime: python
     runtimeVersion: 3.12.0
-    startCommand: uvicorn backend_python.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn backend_python.main:app --host 0.0.0.0 --port $PORT --reload
