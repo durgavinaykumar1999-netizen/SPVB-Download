@@ -4,21 +4,10 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger()
 
-# Try to import pytube for YouTube (no cookies needed)
+# NOTE: pytube is removed due to unreliable cipher decryption on many videos
+# yt-dlp with Android API fallback handles all videos reliably
 PYTUBE_AVAILABLE = False
 PytubeYouTube = None
-
-try:
-    from pytube import YouTube as PytubeYouTube
-    PYTUBE_AVAILABLE = True
-except Exception:
-    # Silent fail - pytube only used for YouTube, won't affect other providers
-    try:
-        from pytubefix import YouTube as PytubeYouTube
-        PYTUBE_AVAILABLE = True
-    except Exception:
-        # Silent fail - will use yt-dlp as fallback for YouTube only
-        PYTUBE_AVAILABLE = False
 
 
 class YouTubeProvider:
@@ -71,82 +60,21 @@ class YouTubeProvider:
         return opts
 
     async def get_metadata(self, url: str):
-        """Extract metadata - tries pytube first (no cookies), then yt-dlp"""
+        """Extract metadata using yt-dlp with Android API fallback"""
         try:
-            # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
 
-            # Try pytube first (no cookies needed)
-            if PYTUBE_AVAILABLE and PytubeYouTube:
-                try:
-                    yt = PytubeYouTube(url)
-
-                    qualities = []
-                    try:
-                        for stream in yt.streams.filter(progressive=True, file_extension='mp4'):
-                            if stream.resolution:
-                                height = int(stream.resolution.replace('p', ''))
-                                if height not in [q['value'] for q in qualities]:
-                                    qualities.append({
-                                        'label': f"{height}p",
-                                        'value': height
-                                    })
-                    except:
-                        qualities = [{'label': 'best', 'value': 'best'}]
-
-                    qualities = sorted(qualities, key=lambda x: x['value'], reverse=True)
-
-                    return {
-                        'title': yt.title,
-                        'duration': yt.length,
-                        'thumbnail': yt.thumbnail_url,
-                        'uploader': yt.author,
-                        'view_count': yt.views,
-                        'qualities': qualities if qualities else [{'label': 'best', 'value': 'best'}],
-                        'platform': self.platform,
-                        'is_age_restricted': False
-                    }
-                except Exception:
-                    # Silent fail - use yt-dlp fallback
-                    pass
-
-            # Fallback to yt-dlp with cookies
-            ydl_opts = self._get_ydl_opts(download=False, use_cookies=True)
-            info = None
+            # Use yt-dlp - it handles all videos including with Android API fallback
+            ydl_opts = self._get_ydl_opts(download=False, use_cookies=False)
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = ydl.extract_info(url, download=False)
-                except yt_dlp.utils.DownloadError as e:
-                    error_msg = str(e)
-                    if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-                        # This video requires authentication or is bot-protected
-                        raise Exception(
-                            "⚠️ This video is age-restricted or requires login. "
-                            "YouTube bot detection is blocking access. "
-                            "Please try downloading with a YouTube login or use YouTube's official app."
-                        )
-
-            # Fallback: try yt-dlp without cookies
-            if info is None:
-                ydl_opts = self._get_ydl_opts(download=False, use_cookies=False)
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    try:
-                        info = ydl.extract_info(url, download=False)
-                    except Exception as e2:
-                        error_str = str(e2)
-                        if "Sign in to confirm" in error_str or "bot" in error_str.lower():
-                            raise Exception(
-                                "⚠️ This video is age-restricted or requires login. "
-                                "Please try downloading with YouTube login or official app."
-                            )
-                        raise
+                info = ydl.extract_info(url, download=False)
 
             formats = info.get('formats', [])
             qualities = []
 
             for fmt in formats:
-                if fmt.get('height'):
+                if fmt.get('height') and fmt.get('vcodec') != 'none':  # Only video formats
                     height = fmt.get('height')
                     if height not in [q['value'] for q in qualities]:
                         qualities.append({
@@ -171,124 +99,32 @@ class YouTubeProvider:
             raise
 
     async def download(self, url: str, quality: str, save_path: str):
-        """Download YouTube video - tries pytube first, then yt-dlp"""
+        """Download YouTube video using yt-dlp with Android API fallback"""
         try:
-            # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
 
-            # Try pytube first (no cookies needed)
-            if PYTUBE_AVAILABLE and PytubeYouTube:
-                try:
-                    yt = PytubeYouTube(url)
-
-                    # Select stream based on quality
-                    if quality == 'best':
-                        stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
-                    else:
-                        quality_int = int(quality)
-                        stream = yt.streams.filter(
-                            progressive=True,
-                            file_extension='mp4',
-                            resolution=f'{quality_int}p'
-                        ).first()
-
-                        if not stream:
-                            stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
-
-                    if not stream:
-                        stream = yt.streams.get_highest_resolution()
-
-                    if not stream:
-                        raise Exception("No suitable stream found")
-
-                    output_file = stream.download(output_path=save_path)
-
-                    logger.info(f"✅ YouTube download: {yt.title}")
-                    return {
-                        'success': True,
-                        'filename': output_file,
-                        'title': yt.title,
-                        'format': 'mp4'
-                    }
-                except Exception:
-                    # Silent fail - use yt-dlp fallback
-                    pass
-
-            # Fallback to yt-dlp with cookies
-            # Format string for best quality at specified height
+            # Format string for quality selection
             if quality == 'best':
                 quality_value = 'bestvideo+bestaudio/best'
             else:
                 quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
 
-            # Try with browser cookies first
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=True)
+            # Use yt-dlp - handles all videos with Android API fallback
+            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
             ydl_opts['format'] = quality_value
-            download_succeeded = False
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
-                    download_succeeded = True
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
 
-                    logger.info(f"✅ YouTube download: {info.get('title', '')}")
+                logger.info(f"✅ YouTube download: {info.get('title', '')}")
 
-                    return {
-                        'success': True,
-                        'filename': filename,
-                        'title': info.get('title', ''),
-                        'format': info.get('ext', 'mp4')
-                    }
-                except yt_dlp.utils.DownloadError as e:
-                    error_msg = str(e)
-                    if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-                        raise Exception(
-                            "⚠️ This video is age-restricted or requires login. "
-                            "YouTube bot detection is blocking access. "
-                            "Please try with YouTube login or official app."
-                        )
-
-            # Fallback: try without strict cookie requirement
-            if not download_succeeded:
-                logger.info("Attempting yt-dlp fallback without cookie requirement...")
-                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
-                ydl_opts['format'] = quality_value
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
-                    try:
-                        info = ydl_retry.extract_info(url, download=True)
-                        filename = ydl_retry.prepare_filename(info)
-                        download_succeeded = True
-
-                        logger.info(f"✅ Downloaded with yt-dlp fallback: {info.get('title', '')}")
-
-                        return {
-                            'success': True,
-                            'filename': filename,
-                            'title': info.get('title', ''),
-                            'format': info.get('ext', 'mp4')
-                        }
-                    except yt_dlp.utils.DownloadError as e2:
-                        logger.warning(f"Fallback failed, trying best quality...")
-
-            # Final fallback to best available quality
-            if not download_succeeded:
-                logger.info("Using best available quality fallback...")
-                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
-                ydl_opts['format'] = 'best'
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl_fallback:
-                    info = ydl_fallback.extract_info(url, download=True)
-                    filename = ydl_fallback.prepare_filename(info)
-
-                    logger.info(f"✅ Downloaded with best quality: {info.get('title', '')}")
-
-                    return {
-                        'success': True,
-                        'filename': filename,
-                        'title': info.get('title', ''),
-                        'format': info.get('ext', 'mp4'),
-                        'note': 'Downloaded with best available quality'
-                    }
+                return {
+                    'success': True,
+                    'filename': filename,
+                    'title': info.get('title', ''),
+                    'format': info.get('ext', 'mp4')
+                }
         except Exception as e:
             logger.error(f"❌ YouTube download error: {str(e)}")
             raise
