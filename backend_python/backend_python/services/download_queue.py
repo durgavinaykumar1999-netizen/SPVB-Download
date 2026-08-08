@@ -62,10 +62,12 @@ class DownloadQueue:
                 os.makedirs(save_path, exist_ok=True)
 
                 provider = get_provider(download_info["url"])
+                user_cookies = download_info.get("user_cookies")
                 result = await provider.download(
                     download_info["url"],
                     download_info["quality"],
-                    save_path
+                    save_path,
+                    user_cookies=user_cookies if 'youtube' in download_info["url"].lower() else None
                 )
 
                 # Upload to Cloudinary

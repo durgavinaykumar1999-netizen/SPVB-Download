@@ -24,6 +24,30 @@ interface Download {
   error?: string;
 }
 
+// Helper to extract YouTube cookies from browser
+const extractYouTubeCookies = (): string | null => {
+  try {
+    // Try to detect if user is logged into YouTube
+    // This is a simple approach - convert browser cookies to Netscape format
+    const cookies = document.cookie.split('; ');
+    if (cookies.length === 0) return null;
+
+    let netscapeFormat = '# Netscape HTTP Cookie File\n';
+    cookies.forEach((cookie) => {
+      const [name, value] = cookie.split('=');
+      if (name && value) {
+        // Format: domain flag path secure expiration name value
+        netscapeFormat += `.youtube.com\tTRUE\t/\tTRUE\t9999999999\t${name}\t${value}\n`;
+      }
+    });
+
+    return netscapeFormat || null;
+  } catch (e) {
+    console.warn('Could not extract YouTube cookies:', e);
+    return null;
+  }
+};
+
 function App() {
   const apiUrl = process.env.REACT_APP_API_URL || 'https://spvb-download-backend.onrender.com';
 
@@ -44,6 +68,8 @@ function App() {
   const [showHistory, setShowHistory] = useState(false);
   const [autoDownloadCompleted, setAutoDownloadCompleted] = useState<Set<string>>(new Set());
   const [hiddenDownloadIds, setHiddenDownloadIds] = useState<Set<string>>(new Set());
+  const [userCookies, setUserCookies] = useState<string | null>(null);
+  const [isYouTubeLogged, setIsYouTubeLogged] = useState(false);
 
   useEffect(() => {
     const savedSessionId = localStorage.getItem('spvb_session_id');
@@ -62,6 +88,16 @@ function App() {
       setMessage('✅ Session restored');
     } else {
       createSession();
+    }
+
+    // Try to extract YouTube cookies from browser
+    const cookies = extractYouTubeCookies();
+    if (cookies) {
+      setUserCookies(cookies);
+      setIsYouTubeLogged(true);
+      setMessage('✅ YouTube login detected - will use your account for downloads');
+    } else {
+      setMessage('⚠️ Not logged into YouTube - please log in for better download success');
     }
   }, []);
 
@@ -120,7 +156,11 @@ function App() {
       const res = await apiCall(`${apiUrl}/api/metadata`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, session_id: sessionId }),
+        body: JSON.stringify({
+          url,
+          session_id: sessionId,
+          user_cookies: userCookies, // Send user's YouTube cookies
+        }),
       });
 
       const data = await res.json();
@@ -153,6 +193,7 @@ function App() {
           url,
           session_id: sessionId,
           quality: selectedQuality,
+          user_cookies: userCookies, // Send user's YouTube cookies
         }),
       });
 

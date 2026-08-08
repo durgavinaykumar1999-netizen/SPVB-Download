@@ -22,11 +22,13 @@ class SessionRequest(BaseModel):
 class MetadataRequest(BaseModel):
     url: str
     session_id: str
+    user_cookies: str = None  # Optional: user's YouTube cookies from browser
 
 class DownloadRequest(BaseModel):
     url: str
     session_id: str
     quality: str = "best"
+    user_cookies: str = None  # Optional: user's YouTube cookies from browser
 
 class SavePathRequest(BaseModel):
     session_id: str
@@ -58,7 +60,7 @@ async def get_session():
 @router.post("/metadata")
 async def get_metadata(request: MetadataRequest):
     try:
-        metadata = await download_service.get_metadata(request.url)
+        metadata = await download_service.get_metadata(request.url, user_cookies=request.user_cookies)
 
         return {
             "success": True,
@@ -77,7 +79,8 @@ async def start_download(request: DownloadRequest):
             download_id=download_id,
             session_id=request.session_id,
             url=request.url,
-            quality=request.quality
+            quality=request.quality,
+            user_cookies=request.user_cookies
         )
 
         return {

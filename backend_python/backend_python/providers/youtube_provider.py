@@ -1,17 +1,9 @@
 import yt_dlp
 import os
+import tempfile
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
-
-# YouTube account cookies for authentication bypass
-COOKIES_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'cookies.txt')
-COOKIES_AVAILABLE = os.path.exists(COOKIES_PATH)
-
-if COOKIES_AVAILABLE:
-    logger.info(f"✅ YouTube cookies found at {COOKIES_PATH}")
-else:
-    logger.warning(f"⚠️  No YouTube cookies file found at {COOKIES_PATH}")
 
 
 class YouTubeProvider:
@@ -26,8 +18,8 @@ class YouTubeProvider:
             return f"https://www.youtube.com/watch?v={video_id}"
         return url
 
-    def _get_ydl_opts(self, download: bool = False, save_path: str = None):
-        """Get yt-dlp options - use account cookies if available"""
+    def _get_ydl_opts(self, download: bool = False, save_path: str = None, user_cookies: str = None):
+        """Get yt-dlp options - use user's browser cookies if provided"""
         opts = {
             'quiet': False,
             'no_warnings': False,
@@ -42,19 +34,27 @@ class YouTubeProvider:
             }
         }
 
-        # Use account cookies if available (bypasses bot detection completely)
-        if COOKIES_AVAILABLE:
-            opts['cookiefile'] = COOKIES_PATH
-            logger.info("Using YouTube account cookies for authentication")
-        else:
-            # Fallback: Try Android client without cookies
-            opts['extractor_args'] = {
-                'youtube': {
-                    'player_client': ['android', 'android_vr', 'web'],
-                    'skip': ['hls', 'dash'],
-                }
+        # Use user's browser cookies if provided (from their YouTube login)
+        if user_cookies:
+            try:
+                # Write user's cookies to temporary file
+                temp_cookies = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+                temp_cookies.write(user_cookies)
+                temp_cookies.close()
+                opts['cookiefile'] = temp_cookies.name
+                logger.info(f"✅ Using user's YouTube cookies (authenticated)")
+                return opts
+            except Exception as e:
+                logger.warning(f"Failed to use user cookies: {e}, falling back to anonymous")
+
+        # Fallback: Try Android client without cookies
+        opts['extractor_args'] = {
+            'youtube': {
+                'player_client': ['android', 'android_vr', 'web'],
+                'skip': ['hls', 'dash'],
             }
-            logger.warning("No cookies file - falling back to anonymous extraction (may be blocked)")
+        }
+        logger.warning("⚠️ No user cookies - falling back to anonymous (may be blocked by YouTube)")
 
         if download and save_path:
             opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
@@ -63,13 +63,13 @@ class YouTubeProvider:
 
         return opts
 
-    async def get_metadata(self, url: str):
-        """Extract metadata using yt-dlp with Android API"""
+    async def get_metadata(self, url: str, user_cookies: str = None):
+        """Extract metadata using yt-dlp with user's YouTube cookies"""
         try:
             url = self._normalize_url(url)
 
-            # Use yt-dlp with Android player (no cookies needed)
-            ydl_opts = self._get_ydl_opts(download=False)
+            # Use user's cookies if provided
+            ydl_opts = self._get_ydl_opts(download=False, user_cookies=user_cookies)
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -102,8 +102,8 @@ class YouTubeProvider:
             logger.error(f"YouTube metadata error: {str(e)}")
             raise
 
-    async def download(self, url: str, quality: str, save_path: str):
-        """Download YouTube video using yt-dlp with Android API"""
+    async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
+        """Download YouTube video using yt-dlp with user's YouTube cookies"""
         try:
             url = self._normalize_url(url)
 
@@ -113,8 +113,8 @@ class YouTubeProvider:
             else:
                 quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
 
-            # Use yt-dlp with Android player (no cookies needed on server)
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path)
+            # Use user's cookies if provided
+            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, user_cookies=user_cookies)
             ydl_opts['format'] = quality_value
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
