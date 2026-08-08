@@ -11,15 +11,13 @@ PytubeYouTube = None
 try:
     from pytube import YouTube as PytubeYouTube
     PYTUBE_AVAILABLE = True
-    logger.info("✅ pytube available - will use as primary YouTube provider (NO COOKIES NEEDED)")
-except Exception as e:
-    logger.warning(f"⚠️ pytube import failed ({str(e)}) - will use yt-dlp with cookies")
+except Exception:
+    # Silent fail - pytube only used for YouTube, won't affect other providers
     try:
         from pytubefix import YouTube as PytubeYouTube
         PYTUBE_AVAILABLE = True
-        logger.info("✅ pytubefix available - will use as primary YouTube provider (NO COOKIES NEEDED)")
-    except Exception as e2:
-        logger.warning(f"⚠️ pytubefix also unavailable ({str(e2)}) - falling back to yt-dlp only")
+    except Exception:
+        # Silent fail - will use yt-dlp as fallback for YouTube only
         PYTUBE_AVAILABLE = False
 
 
@@ -81,7 +79,6 @@ class YouTubeProvider:
             # Try pytube first (no cookies needed)
             if PYTUBE_AVAILABLE and PytubeYouTube:
                 try:
-                    logger.info("📺 Trying pytube (no cookies needed)...")
                     yt = PytubeYouTube(url)
 
                     qualities = []
@@ -99,7 +96,6 @@ class YouTubeProvider:
 
                     qualities = sorted(qualities, key=lambda x: x['value'], reverse=True)
 
-                    logger.info(f"✅ Metadata extracted with pytube (no cookies)")
                     return {
                         'title': yt.title,
                         'duration': yt.length,
@@ -110,8 +106,9 @@ class YouTubeProvider:
                         'platform': self.platform,
                         'is_age_restricted': False
                     }
-                except Exception as e:
-                    logger.warning(f"⚠️ pytube failed: {str(e)}, falling back to yt-dlp...")
+                except Exception:
+                    # Silent fail - use yt-dlp fallback
+                    pass
 
             # Fallback to yt-dlp with cookies
             logger.info("Trying yt-dlp with cookies...")
@@ -178,7 +175,6 @@ class YouTubeProvider:
             # Try pytube first (no cookies needed)
             if PYTUBE_AVAILABLE and PytubeYouTube:
                 try:
-                    logger.info(f"📺 Downloading with pytube (no cookies)...")
                     yt = PytubeYouTube(url)
 
                     # Select stream based on quality
@@ -201,18 +197,18 @@ class YouTubeProvider:
                     if not stream:
                         raise Exception("No suitable stream found")
 
-                    logger.info(f"⏳ Downloading: {yt.title} ({stream.resolution})...")
                     output_file = stream.download(output_path=save_path)
 
-                    logger.info(f"✅ Downloaded with pytube: {yt.title}")
+                    logger.info(f"✅ YouTube download: {yt.title}")
                     return {
                         'success': True,
                         'filename': output_file,
                         'title': yt.title,
                         'format': 'mp4'
                     }
-                except Exception as e:
-                    logger.warning(f"⚠️ pytube download failed: {str(e)}, falling back to yt-dlp...")
+                except Exception:
+                    # Silent fail - use yt-dlp fallback
+                    pass
 
             # Fallback to yt-dlp with cookies
             logger.info("Trying yt-dlp with cookies...")
