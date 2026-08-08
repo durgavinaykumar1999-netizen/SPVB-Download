@@ -3,6 +3,12 @@ import os
 import tempfile
 from ..utils.logger import setup_logger
 
+try:
+    from pytubefix import YouTube
+    PYTUBEFIX_AVAILABLE = True
+except ImportError:
+    PYTUBEFIX_AVAILABLE = False
+
 logger = setup_logger()
 
 
@@ -65,13 +71,12 @@ class YouTubeProvider:
         return opts
 
     async def get_metadata(self, url: str, user_cookies: str = None):
-        """Extract metadata using yt-dlp with user's YouTube cookies"""
+        """Extract metadata using yt-dlp (primary) with pytubefix fallback"""
+        url = self._normalize_url(url)
+
+        # Try yt-dlp first (better for complex videos)
         try:
-            url = self._normalize_url(url)
-
-            # Use user's cookies if provided
             ydl_opts = self._get_ydl_opts(download=False, user_cookies=user_cookies)
-
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
 
@@ -79,7 +84,7 @@ class YouTubeProvider:
             qualities = []
 
             for fmt in formats:
-                if fmt.get('height') and fmt.get('vcodec') != 'none':  # Only video formats
+                if fmt.get('height') and fmt.get('vcodec') != 'none':
                     height = fmt.get('height')
                     if height not in [q['value'] for q in qualities]:
                         qualities.append({
@@ -100,8 +105,33 @@ class YouTubeProvider:
                 'is_age_restricted': info.get('age_limit', 0) > 0
             }
         except Exception as e:
-            logger.error(f"YouTube metadata error: {str(e)}")
-            raise
+            logger.warning(f"yt-dlp failed: {str(e)}, trying pytubefix...")
+
+            # Fallback to pytubefix if available
+            if PYTUBEFIX_AVAILABLE:
+                try:
+                    yt = YouTube(url)
+                    return {
+                        'title': yt.title,
+                        'duration': yt.length,
+                        'thumbnail': yt.thumbnail_url,
+                        'uploader': yt.author,
+                        'view_count': yt.views,
+                        'qualities': [
+                            {'label': '360p', 'value': '360'},
+                            {'label': '480p', 'value': '480'},
+                            {'label': '720p', 'value': '720'},
+                            {'label': '1080p', 'value': '1080'},
+                        ],
+                        'platform': self.platform,
+                        'is_age_restricted': False
+                    }
+                except Exception as e2:
+                    logger.error(f"pytubefix also failed: {str(e2)}")
+                    raise
+            else:
+                logger.error(f"YouTube metadata error: {str(e)}")
+                raise
 
     async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         """Download YouTube video using yt-dlp with user's YouTube cookies"""
