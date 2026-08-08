@@ -22,14 +22,24 @@ class YouTubeProvider:
             'no_warnings': True,
             'skip_unavailable_fragments': True,
             'socket_timeout': 30,
-            'cookiefile': None,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
         }
 
-        # Only use aggressive extraction skipping if enabled and not falling back
-        if skip_extraction:
+        # Use better extraction with client options
+        if not skip_extraction:
             opts['extractor_args'] = {
                 'youtube': {
-                    'skip': ['webpage'],  # Skip webpage but allow JS extraction
+                    'player_client': ['web'],
+                }
+            }
+        else:
+            opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['web'],
+                    'skip': ['webpage'],
                 }
             }
 
@@ -39,24 +49,27 @@ class YouTubeProvider:
         return opts
 
     async def get_metadata(self, url: str):
-        """Extract metadata without requiring cookies"""
+        """Extract metadata - handles bot detection gracefully"""
         try:
             # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
 
-            # Try with restricted extraction first
-            ydl_opts = self._get_ydl_opts(download=False, skip_extraction=True)
+            # Try with web client first
+            ydl_opts = self._get_ydl_opts(download=False, skip_extraction=False)
             info = None
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
                     info = ydl.extract_info(url, download=False)
                 except yt_dlp.utils.DownloadError as e:
-                    logger.warning(f"Restricted extraction failed: {str(e)}, retrying without restrictions...")
+                    if "Sign in to confirm" in str(e) or "bot" in str(e).lower():
+                        logger.warning(f"YouTube bot detection triggered: {str(e)}")
+                    else:
+                        logger.warning(f"Extraction failed: {str(e)}, retrying...")
 
-            # Fallback: retry without extraction restrictions
+            # Fallback: retry with different options
             if info is None:
-                ydl_opts = self._get_ydl_opts(download=False, skip_extraction=False)
+                ydl_opts = self._get_ydl_opts(download=False, skip_extraction=True)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=False)
 
@@ -89,7 +102,7 @@ class YouTubeProvider:
             raise
 
     async def download(self, url: str, quality: str, save_path: str):
-        """Download YouTube video without cookies - works with public videos"""
+        """Download YouTube video - handles bot detection and quality fallbacks"""
         try:
             # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
@@ -100,8 +113,8 @@ class YouTubeProvider:
             else:
                 quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
 
-            # Try with restricted extraction first
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=True)
+            # Try with web client extraction
+            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=False)
             ydl_opts['format'] = quality_value
             download_succeeded = False
 
@@ -120,11 +133,15 @@ class YouTubeProvider:
                         'format': info.get('ext', 'mp4')
                     }
                 except yt_dlp.utils.DownloadError as e:
-                    logger.warning(f"Download with quality {quality} failed: {str(e)}, retrying without restrictions...")
+                    error_msg = str(e)
+                    if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
+                        logger.warning(f"YouTube bot detection - video may require login: {error_msg}")
+                    else:
+                        logger.warning(f"Download with quality {quality} failed: {error_msg}, trying alternatives...")
 
-            # Fallback: retry without extraction restrictions
+            # Fallback: try with different extraction
             if not download_succeeded:
-                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=False)
+                ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, skip_extraction=True)
                 ydl_opts['format'] = quality_value
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
                     try:
