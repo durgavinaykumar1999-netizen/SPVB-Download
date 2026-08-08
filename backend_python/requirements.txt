@@ -14,7 +14,7 @@ cloudinary==1.36.0
 
 # Video Downloading
 yt-dlp>=2024.8.0
-
+pytube>=15.0.0
 instaloader>=4.13
 
 # Utilities
