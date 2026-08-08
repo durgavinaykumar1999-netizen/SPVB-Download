@@ -31,30 +31,31 @@ class YouTubeProvider:
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
+            },
+            # Always add fallback player clients for better compatibility
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['web', 'android_vr', 'android'],
+                    'skip': ['hls', 'dash'],
+                }
             }
         }
 
         # Use user's browser cookies if provided (from their YouTube login)
-        if user_cookies:
+        if user_cookies and user_cookies.strip():
             try:
-                # Write user's cookies to temporary file
-                temp_cookies = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
-                temp_cookies.write(user_cookies)
-                temp_cookies.close()
-                opts['cookiefile'] = temp_cookies.name
-                logger.info(f"✅ Using user's YouTube cookies (authenticated)")
-                return opts
+                # Validate cookie format before using
+                if 'Netscape HTTP Cookie File' in user_cookies and len(user_cookies) > 50:
+                    # Write user's cookies to temporary file
+                    temp_cookies = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
+                    temp_cookies.write(user_cookies)
+                    temp_cookies.close()
+                    opts['cookiefile'] = temp_cookies.name
+                    logger.info(f"Using browser cookies for YouTube authentication")
+                else:
+                    logger.warning("Cookie format invalid, using anonymous download")
             except Exception as e:
-                logger.warning(f"Failed to use user cookies: {e}, falling back to anonymous")
-
-        # Fallback: Try Android client without cookies
-        opts['extractor_args'] = {
-            'youtube': {
-                'player_client': ['android', 'android_vr', 'web'],
-                'skip': ['hls', 'dash'],
-            }
-        }
-        logger.warning("⚠️ No user cookies - falling back to anonymous (may be blocked by YouTube)")
+                logger.warning(f"Failed to use cookies: {e}, falling back to anonymous")
 
         if download and save_path:
             opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"

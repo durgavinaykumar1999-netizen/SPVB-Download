@@ -27,21 +27,29 @@ interface Download {
 // Helper to extract YouTube cookies from browser
 const extractYouTubeCookies = (): string | null => {
   try {
-    // Try to detect if user is logged into YouTube
-    // This is a simple approach - convert browser cookies to Netscape format
+    // Only extract cookies that are likely to be authentication cookies
     const cookies = document.cookie.split('; ');
     if (cookies.length === 0) return null;
 
+    // Filter for important YouTube auth cookies only
+    const authCookieNames = ['SIDCC', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO', '__Secure-1PSID', '__Secure-1PSIDTS', '__Secure-3PSID', '__Secure-3PSIDTS', 'SameSite', 'VISITOR_INFO1_LIVE'];
+
     let netscapeFormat = '# Netscape HTTP Cookie File\n';
+    let hasAuthCookie = false;
+
     cookies.forEach((cookie) => {
-      const [name, value] = cookie.split('=');
+      const [name, value] = cookie.split('=', 2);
       if (name && value) {
-        // Format: domain flag path secure expiration name value
-        netscapeFormat += `.youtube.com\tTRUE\t/\tTRUE\t9999999999\t${name}\t${value}\n`;
+        // Only include known auth cookies to avoid broken cookies
+        if (authCookieNames.some(authName => name.includes(authName))) {
+          hasAuthCookie = true;
+          // Format: domain flag path secure expiration name value
+          netscapeFormat += `.youtube.com\tTRUE\t/\tTRUE\t9999999999\t${name}\t${value}\n`;
+        }
       }
     });
 
-    return netscapeFormat || null;
+    return hasAuthCookie ? netscapeFormat : null;
   } catch (e) {
     console.warn('Could not extract YouTube cookies:', e);
     return null;
