@@ -1,11 +1,5 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import {
-  generateDeviceFingerprint,
-  getStoredFingerprint,
-  storeFingerprint,
-  getDeviceFingerprintHeader,
-} from './deviceFingerprint';
 
 interface Quality {
   label: string;
@@ -33,17 +27,12 @@ interface Download {
 function App() {
   const apiUrl = process.env.REACT_APP_API_URL || 'https://spvb-download-backend.onrender.com';
 
-  // Helper to add device fingerprint to all requests
+  // Helper to make API calls
   const apiCall = async (
     url: string,
     options: RequestInit = {}
   ): Promise<Response> => {
-    const deviceFingerprint = getDeviceFingerprintHeader();
-    const headers = {
-      ...(options.headers || {}),
-      'X-Device-Fingerprint': deviceFingerprint,
-    };
-    return fetch(url, { ...options, headers });
+    return fetch(url, options);
   };
   const [sessionId, setSessionId] = useState<string>('');
   const [url, setUrl] = useState<string>('');
@@ -60,10 +49,6 @@ function App() {
     const savedSessionId = localStorage.getItem('spvb_session_id');
     const savedHiddenIds = localStorage.getItem('spvb_hidden_downloads');
 
-    // Generate device fingerprint
-    const currentFingerprint = generateDeviceFingerprint();
-    const storedFingerprint = getStoredFingerprint();
-
     if (savedHiddenIds) {
       try {
         setHiddenDownloadIds(new Set(JSON.parse(savedHiddenIds)));
@@ -73,29 +58,9 @@ function App() {
     }
 
     if (savedSessionId) {
-      // Verify device fingerprint matches
-      if (storedFingerprint && currentFingerprint.fingerprint !== storedFingerprint.fingerprint) {
-        // Device mismatch - clear session and create new one
-        setMessage('⚠️ Session started on different device - creating new session');
-        localStorage.removeItem('spvb_session_id');
-        localStorage.removeItem('spvb_hidden_downloads');
-        sessionStorage.removeItem('spvb_device_fingerprint');
-
-        // Generate and store new fingerprint
-        storeFingerprint(currentFingerprint);
-        createSession();
-      } else {
-        setSessionId(savedSessionId);
-        setMessage('✅ Session restored');
-
-        // Ensure fingerprint is stored
-        if (!storedFingerprint) {
-          storeFingerprint(currentFingerprint);
-        }
-      }
+      setSessionId(savedSessionId);
+      setMessage('✅ Session restored');
     } else {
-      // Generate and store device fingerprint for new session
-      storeFingerprint(currentFingerprint);
       createSession();
     }
   }, []);
@@ -134,12 +99,6 @@ function App() {
       const res = await apiCall(`${apiUrl}/api/session`);
       const data = await res.json();
 
-      if (res.status === 401) {
-        setMessage('🔒 Session blocked - different device detected');
-        localStorage.removeItem('spvb_session_id');
-        return;
-      }
-
       if (data.success) {
         setSessionId(data.session_id);
         localStorage.setItem('spvb_session_id', data.session_id);
@@ -163,13 +122,6 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, session_id: sessionId }),
       });
-
-      if (res.status === 401) {
-        setMessage('🔒 Session expired - device changed');
-        localStorage.removeItem('spvb_session_id');
-        setSessionId('');
-        return;
-      }
 
       const data = await res.json();
       if (data.success) {
@@ -204,13 +156,6 @@ function App() {
         }),
       });
 
-      if (res.status === 401) {
-        setMessage('🔒 Session expired - device changed');
-        localStorage.removeItem('spvb_session_id');
-        setSessionId('');
-        return;
-      }
-
       const data = await res.json();
       if (data.success) {
         setMessage(`⏳ Downloading...`);
@@ -230,13 +175,6 @@ function App() {
     try {
       const res = await apiCall(`${apiUrl}/api/downloads?session_id=${sessionId}`);
 
-      if (res.status === 401) {
-        setMessage('🔒 Session expired - device changed');
-        localStorage.removeItem('spvb_session_id');
-        setSessionId('');
-        return;
-      }
-
       const data = await res.json();
       if (data.success) {
         setDownloads(data.downloads);
@@ -251,13 +189,6 @@ function App() {
       const res = await apiCall(
         `${apiUrl}/api/download/${downloadId}/stream?session_id=${sessionId}`
       );
-
-      if (res.status === 401) {
-        setMessage('🔒 Session expired - device changed');
-        localStorage.removeItem('spvb_session_id');
-        setSessionId('');
-        return;
-      }
 
       if (!res.ok) {
         throw new Error(`Download failed`);
@@ -303,7 +234,6 @@ function App() {
         setAutoDownloadCompleted(new Set());
         localStorage.removeItem('spvb_session_id');
         localStorage.removeItem('spvb_hidden_downloads');
-        sessionStorage.removeItem('spvb_device_fingerprint');
 
         setTimeout(() => createSession(), 1000);
       }
