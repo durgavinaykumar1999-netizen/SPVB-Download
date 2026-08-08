@@ -23,20 +23,31 @@ class YouTubeProvider:
         return url
 
     def _get_ydl_opts(self, download: bool = False, save_path: str = None):
-        """Get yt-dlp options - let yt-dlp auto-select best player (usually Android VR)"""
+        """Get yt-dlp options with bot detection bypass"""
         opts = {
             'quiet': False,
             'no_warnings': False,
             'socket_timeout': 30,
-            'retries': 10,
-            'fragment_retries': 10,
+            'retries': 15,
+            'fragment_retries': 15,
             'skip_unavailable_fragments': True,
             'keep_fragments': False,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Sec-Fetch-Dest': 'document',
+                'Sec-Fetch-Mode': 'navigate',
+                'Sec-Fetch-Site': 'none',
+            }
         }
 
-        # Don't force specific player - let yt-dlp auto-select
-        # Android VR player works best and doesn't need cookies
-        # yt-dlp will try: web → android → android_vr → ios → mweb
+        # Force Android client which usually bypasses bot detection better
+        opts['extractor_args'] = {
+            'youtube': {
+                'player_client': ['android', 'android_vr', 'web'],
+                'skip': ['hls', 'dash'],  # Skip complex formats that need signature
+            }
+        }
 
         if download and save_path:
             opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
