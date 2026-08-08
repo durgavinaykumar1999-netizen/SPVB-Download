@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import './App.css';
 
 interface Quality {
@@ -69,7 +69,64 @@ function App() {
   const [autoDownloadCompleted, setAutoDownloadCompleted] = useState<Set<string>>(new Set());
   const [hiddenDownloadIds, setHiddenDownloadIds] = useState<Set<string>>(new Set());
   const [userCookies, setUserCookies] = useState<string | null>(null);
-  const [isYouTubeLogged, setIsYouTubeLogged] = useState(false);
+
+  const createSession = useCallback(async () => {
+    try {
+      const res = await apiCall(`${apiUrl}/api/session`);
+      const data = await res.json();
+
+      if (data.success) {
+        setSessionId(data.session_id);
+        localStorage.setItem('spvb_session_id', data.session_id);
+        setMessage('✅ Ready');
+      }
+    } catch (error) {
+      setMessage(`❌ Session failed: ${error}`);
+    }
+  }, [apiUrl]);
+
+  const fetchDownloads = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const res = await apiCall(`${apiUrl}/api/downloads?session_id=${sessionId}`);
+
+      const data = await res.json();
+      if (data.success) {
+        setDownloads(data.downloads);
+      }
+    } catch (error) {
+      console.error('Failed to fetch downloads:', error);
+    }
+  }, [sessionId, apiUrl]);
+
+  const triggerAutoDownload = useCallback(async (downloadId: string) => {
+    try {
+      const res = await apiCall(
+        `${apiUrl}/api/download/${downloadId}/stream?session_id=${sessionId}`
+      );
+
+      if (!res.ok) {
+        throw new Error(`Download failed`);
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `video-${downloadId.substring(0, 8)}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 100);
+
+      setMessage(`✅ Download complete!`);
+    } catch (error) {
+      console.error('Auto-download failed:', error);
+    }
+  }, [sessionId, apiUrl]);
 
   useEffect(() => {
     const savedSessionId = localStorage.getItem('spvb_session_id');
@@ -94,12 +151,11 @@ function App() {
     const cookies = extractYouTubeCookies();
     if (cookies) {
       setUserCookies(cookies);
-      setIsYouTubeLogged(true);
       setMessage('✅ YouTube login detected - will use your account for downloads');
     } else {
       setMessage('⚠️ Not logged into YouTube - please log in for better download success');
     }
-  }, []);
+  }, [createSession]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -107,7 +163,7 @@ function App() {
       fetchDownloads();
     }, 2000);
     return () => clearInterval(interval);
-  }, [sessionId]);
+  }, [sessionId, fetchDownloads]);
 
   // Auto-download when download completes
   useEffect(() => {
@@ -128,22 +184,7 @@ function App() {
         triggerAutoDownload(d.download_id);
       }
     });
-  }, [downloads, autoDownloadCompleted, hiddenDownloadIds]);
-
-  const createSession = async () => {
-    try {
-      const res = await apiCall(`${apiUrl}/api/session`);
-      const data = await res.json();
-
-      if (data.success) {
-        setSessionId(data.session_id);
-        localStorage.setItem('spvb_session_id', data.session_id);
-        setMessage('✅ Ready');
-      }
-    } catch (error) {
-      setMessage(`❌ Session failed: ${error}`);
-    }
-  };
+  }, [downloads, autoDownloadCompleted, hiddenDownloadIds, triggerAutoDownload]);
 
   const fetchMetadata = async () => {
     if (!url || !sessionId) {
@@ -208,49 +249,6 @@ function App() {
       setMessage(`❌ Error: ${error}`);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchDownloads = async () => {
-    if (!sessionId) return;
-    try {
-      const res = await apiCall(`${apiUrl}/api/downloads?session_id=${sessionId}`);
-
-      const data = await res.json();
-      if (data.success) {
-        setDownloads(data.downloads);
-      }
-    } catch (error) {
-      console.error('Failed to fetch downloads:', error);
-    }
-  };
-
-  const triggerAutoDownload = async (downloadId: string) => {
-    try {
-      const res = await apiCall(
-        `${apiUrl}/api/download/${downloadId}/stream?session_id=${sessionId}`
-      );
-
-      if (!res.ok) {
-        throw new Error(`Download failed`);
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `video-${downloadId.substring(0, 8)}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(link);
-      }, 100);
-
-      setMessage(`✅ Download complete!`);
-    } catch (error) {
-      console.error('Auto-download failed:', error);
     }
   };
 
