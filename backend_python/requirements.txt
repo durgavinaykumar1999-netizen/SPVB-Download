@@ -16,6 +16,9 @@ cloudinary==1.36.0
 yt-dlp>=2024.8.0
 instaloader>=4.13
 
+# HTTP Client
+aiohttp==3.9.1
+
 # Utilities
 requests==2.31.0
 aiofiles==23.2.1
