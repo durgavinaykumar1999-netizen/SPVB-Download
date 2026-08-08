@@ -82,7 +82,6 @@ function App() {
   const [message, setMessage] = useState<string>('');
   const [userCookies, setUserCookies] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
   const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
 
   const createSession = useCallback(async () => {
