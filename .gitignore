@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Cookies (contains auth tokens - NEVER commit)
+backend_python/cookies.txt
+
 # Python
 __pycache__/
 *.py[cod]

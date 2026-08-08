@@ -4,10 +4,14 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger()
 
-# NOTE: pytube is removed due to unreliable cipher decryption on many videos
-# yt-dlp with Android API fallback handles all videos reliably
-PYTUBE_AVAILABLE = False
-PytubeYouTube = None
+# YouTube account cookies for authentication bypass
+COOKIES_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'cookies.txt')
+COOKIES_AVAILABLE = os.path.exists(COOKIES_PATH)
+
+if COOKIES_AVAILABLE:
+    logger.info(f"✅ YouTube cookies found at {COOKIES_PATH}")
+else:
+    logger.warning(f"⚠️  No YouTube cookies file found at {COOKIES_PATH}")
 
 
 class YouTubeProvider:
@@ -23,7 +27,7 @@ class YouTubeProvider:
         return url
 
     def _get_ydl_opts(self, download: bool = False, save_path: str = None):
-        """Get yt-dlp options with bot detection bypass"""
+        """Get yt-dlp options - use account cookies if available"""
         opts = {
             'quiet': False,
             'no_warnings': False,
@@ -35,19 +39,22 @@ class YouTubeProvider:
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Sec-Fetch-Dest': 'document',
-                'Sec-Fetch-Mode': 'navigate',
-                'Sec-Fetch-Site': 'none',
             }
         }
 
-        # Force Android client which usually bypasses bot detection better
-        opts['extractor_args'] = {
-            'youtube': {
-                'player_client': ['android', 'android_vr', 'web'],
-                'skip': ['hls', 'dash'],  # Skip complex formats that need signature
+        # Use account cookies if available (bypasses bot detection completely)
+        if COOKIES_AVAILABLE:
+            opts['cookiefile'] = COOKIES_PATH
+            logger.info("Using YouTube account cookies for authentication")
+        else:
+            # Fallback: Try Android client without cookies
+            opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['android', 'android_vr', 'web'],
+                    'skip': ['hls', 'dash'],
+                }
             }
-        }
+            logger.warning("No cookies file - falling back to anonymous extraction (may be blocked)")
 
         if download and save_path:
             opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
