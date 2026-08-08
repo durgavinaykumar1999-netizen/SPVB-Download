@@ -4,6 +4,21 @@ from ..utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Try to import pytube/pytubefix for YouTube (no cookies needed)
+try:
+    from pytube import YouTube as PytubeYouTube
+    PYTUBE_AVAILABLE = True
+    logger.info("✅ pytube available - will use as primary YouTube provider (NO COOKIES NEEDED)")
+except ImportError:
+    try:
+        from pytubefix import YouTube as PytubeYouTube
+        PYTUBE_AVAILABLE = True
+        logger.info("✅ pytubefix available - will use as primary YouTube provider (NO COOKIES NEEDED)")
+    except ImportError:
+        PYTUBE_AVAILABLE = False
+        logger.warning("⚠️ pytube/pytubefix not installed - using yt-dlp with cookies")
+
+
 class YouTubeProvider:
     def __init__(self):
         self.platform = "youtube"
@@ -54,19 +69,55 @@ class YouTubeProvider:
         return opts
 
     async def get_metadata(self, url: str):
-        """Extract metadata with browser cookie support"""
+        """Extract metadata - tries pytube first (no cookies), then yt-dlp"""
         try:
             # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
 
-            # Try with browser cookies first
+            # Try pytube first (no cookies needed)
+            if PYTUBE_AVAILABLE:
+                try:
+                    logger.info("📺 Trying pytube (no cookies needed)...")
+                    yt = PytubeYouTube(url)
+
+                    qualities = []
+                    try:
+                        for stream in yt.streams.filter(progressive=True, file_extension='mp4'):
+                            if stream.resolution:
+                                height = int(stream.resolution.replace('p', ''))
+                                if height not in [q['value'] for q in qualities]:
+                                    qualities.append({
+                                        'label': f"{height}p",
+                                        'value': height
+                                    })
+                    except:
+                        qualities = [{'label': 'best', 'value': 'best'}]
+
+                    qualities = sorted(qualities, key=lambda x: x['value'], reverse=True)
+
+                    logger.info(f"✅ Metadata extracted with pytube (no cookies)")
+                    return {
+                        'title': yt.title,
+                        'duration': yt.length,
+                        'thumbnail': yt.thumbnail_url,
+                        'uploader': yt.author,
+                        'view_count': yt.views,
+                        'qualities': qualities if qualities else [{'label': 'best', 'value': 'best'}],
+                        'platform': self.platform,
+                        'is_age_restricted': False
+                    }
+                except Exception as e:
+                    logger.warning(f"⚠️ pytube failed: {str(e)}, falling back to yt-dlp...")
+
+            # Fallback to yt-dlp with cookies
+            logger.info("Trying yt-dlp with cookies...")
             ydl_opts = self._get_ydl_opts(download=False, use_cookies=True)
             info = None
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
                     info = ydl.extract_info(url, download=False)
-                    logger.info(f"Metadata extracted successfully with cookies")
+                    logger.info(f"✅ Metadata extracted with yt-dlp (cookies)")
                 except yt_dlp.utils.DownloadError as e:
                     error_msg = str(e)
                     if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
@@ -74,14 +125,14 @@ class YouTubeProvider:
                     else:
                         logger.warning(f"Extraction failed: {error_msg}")
 
-            # Fallback: try without cookies requirement
+            # Fallback: try yt-dlp without cookies requirement
             if info is None:
-                logger.info("Retrying without strict cookie requirement...")
+                logger.info("Retrying yt-dlp without strict cookie requirement...")
                 ydl_opts = self._get_ydl_opts(download=False, use_cookies=False)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     try:
                         info = ydl.extract_info(url, download=False)
-                        logger.info("Metadata extracted with fallback method")
+                        logger.info("✅ Metadata extracted with yt-dlp fallback")
                     except Exception as e2:
                         logger.error(f"All extraction methods failed: {str(e2)}")
                         raise
@@ -115,10 +166,52 @@ class YouTubeProvider:
             raise
 
     async def download(self, url: str, quality: str, save_path: str):
-        """Download YouTube video with cookie support and fallback methods"""
+        """Download YouTube video - tries pytube first, then yt-dlp"""
         try:
             # Normalize YouTube Shorts URLs to standard format
             url = self._normalize_url(url)
+
+            # Try pytube first (no cookies needed)
+            if PYTUBE_AVAILABLE:
+                try:
+                    logger.info(f"📺 Downloading with pytube (no cookies)...")
+                    yt = PytubeYouTube(url)
+
+                    # Select stream based on quality
+                    if quality == 'best':
+                        stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+                    else:
+                        quality_int = int(quality)
+                        stream = yt.streams.filter(
+                            progressive=True,
+                            file_extension='mp4',
+                            resolution=f'{quality_int}p'
+                        ).first()
+
+                        if not stream:
+                            stream = yt.streams.filter(progressive=True, file_extension='mp4').first()
+
+                    if not stream:
+                        stream = yt.streams.get_highest_resolution()
+
+                    if not stream:
+                        raise Exception("No suitable stream found")
+
+                    logger.info(f"⏳ Downloading: {yt.title} ({stream.resolution})...")
+                    output_file = stream.download(output_path=save_path)
+
+                    logger.info(f"✅ Downloaded with pytube: {yt.title}")
+                    return {
+                        'success': True,
+                        'filename': output_file,
+                        'title': yt.title,
+                        'format': 'mp4'
+                    }
+                except Exception as e:
+                    logger.warning(f"⚠️ pytube download failed: {str(e)}, falling back to yt-dlp...")
+
+            # Fallback to yt-dlp with cookies
+            logger.info("Trying yt-dlp with cookies...")
 
             # Format string for best quality at specified height
             if quality == 'best':
@@ -137,7 +230,7 @@ class YouTubeProvider:
                     filename = ydl.prepare_filename(info)
                     download_succeeded = True
 
-                    logger.info(f"✅ Downloaded: {info.get('title', '')} at quality {quality}")
+                    logger.info(f"✅ Downloaded with yt-dlp: {info.get('title', '')} at quality {quality}")
 
                     return {
                         'success': True,
@@ -154,7 +247,7 @@ class YouTubeProvider:
 
             # Fallback: try without strict cookie requirement
             if not download_succeeded:
-                logger.info("Attempting fallback download without cookie requirement...")
+                logger.info("Attempting yt-dlp fallback without cookie requirement...")
                 ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
                 ydl_opts['format'] = quality_value
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
@@ -163,7 +256,7 @@ class YouTubeProvider:
                         filename = ydl_retry.prepare_filename(info)
                         download_succeeded = True
 
-                        logger.info(f"✅ Downloaded with fallback: {info.get('title', '')}")
+                        logger.info(f"✅ Downloaded with yt-dlp fallback: {info.get('title', '')}")
 
                         return {
                             'success': True,
