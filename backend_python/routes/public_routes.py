@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional
 import uuid
 import aiohttp
 from ..services.session_service import SessionService
@@ -22,13 +23,13 @@ class SessionRequest(BaseModel):
 class MetadataRequest(BaseModel):
     url: str
     session_id: str
-    user_cookies: str = None  # Optional: user's YouTube cookies from browser
+    user_cookies: Optional[str] = None
 
 class DownloadRequest(BaseModel):
     url: str
     session_id: str
     quality: str = "best"
-    user_cookies: str = None  # Optional: user's YouTube cookies from browser
+    user_cookies: Optional[str] = None
 
 class SavePathRequest(BaseModel):
     session_id: str
