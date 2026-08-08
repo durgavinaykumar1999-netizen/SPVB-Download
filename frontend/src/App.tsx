@@ -22,16 +22,27 @@ interface Download {
   progress: number;
   filename?: string;
   error?: string;
+  url?: string;
+  quality?: string;
+  metadata?: Metadata;
 }
 
-// Helper to extract YouTube cookies from browser
+interface HistoryItem {
+  id: string;
+  url: string;
+  title: string;
+  thumbnail: string;
+  platform: string;
+  quality: string;
+  downloadedAt: number;
+  metadata?: Metadata;
+}
+
 const extractYouTubeCookies = (): string | null => {
   try {
-    // Only extract cookies that are likely to be authentication cookies
     const cookies = document.cookie.split('; ');
     if (cookies.length === 0) return null;
 
-    // Filter for important YouTube auth cookies only
     const authCookieNames = ['SIDCC', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO', '__Secure-1PSID', '__Secure-1PSIDTS', '__Secure-3PSID', '__Secure-3PSIDTS', 'SameSite', 'VISITOR_INFO1_LIVE'];
 
     let netscapeFormat = '# Netscape HTTP Cookie File\n';
@@ -40,10 +51,8 @@ const extractYouTubeCookies = (): string | null => {
     cookies.forEach((cookie) => {
       const [name, value] = cookie.split('=', 2);
       if (name && value) {
-        // Only include known auth cookies to avoid broken cookies
         if (authCookieNames.some(authName => name.includes(authName))) {
           hasAuthCookie = true;
-          // Format: domain flag path secure expiration name value
           netscapeFormat += `.youtube.com\tTRUE\t/\tTRUE\t9999999999\t${name}\t${value}\n`;
         }
       }
@@ -59,13 +68,11 @@ const extractYouTubeCookies = (): string | null => {
 function App() {
   const apiUrl = process.env.REACT_APP_API_URL || 'https://spvb-download-backend.onrender.com';
 
-  // Helper to make API calls
-  const apiCall = async (
-    url: string,
-    options: RequestInit = {}
-  ): Promise<Response> => {
+  const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
     return fetch(url, options);
   };
+
+  // State Management
   const [sessionId, setSessionId] = useState<string>('');
   const [url, setUrl] = useState<string>('');
   const [metadata, setMetadata] = useState<Metadata | null>(null);
@@ -73,16 +80,15 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [message, setMessage] = useState<string>('');
-  const [showHistory, setShowHistory] = useState(false);
-  const [autoDownloadCompleted, setAutoDownloadCompleted] = useState<Set<string>>(new Set());
-  const [hiddenDownloadIds, setHiddenDownloadIds] = useState<Set<string>>(new Set());
   const [userCookies, setUserCookies] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
 
   const createSession = useCallback(async () => {
     try {
       const res = await apiCall(`${apiUrl}/api/session`);
       const data = await res.json();
-
       if (data.success) {
         setSessionId(data.session_id);
         localStorage.setItem('spvb_session_id', data.session_id);
@@ -97,7 +103,6 @@ function App() {
     if (!sessionId) return;
     try {
       const res = await apiCall(`${apiUrl}/api/downloads?session_id=${sessionId}`);
-
       const data = await res.json();
       if (data.success) {
         setDownloads(data.downloads);
@@ -109,13 +114,8 @@ function App() {
 
   const triggerAutoDownload = useCallback(async (downloadId: string) => {
     try {
-      const res = await apiCall(
-        `${apiUrl}/api/download/${downloadId}/stream?session_id=${sessionId}`
-      );
-
-      if (!res.ok) {
-        throw new Error(`Download failed`);
-      }
+      const res = await apiCall(`${apiUrl}/api/download/${downloadId}/stream?session_id=${sessionId}`);
+      if (!res.ok) throw new Error('Download failed');
 
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -129,22 +129,21 @@ function App() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 100);
-
-      setMessage(`✅ Download complete!`);
     } catch (error) {
       console.error('Auto-download failed:', error);
     }
   }, [sessionId, apiUrl]);
 
+  // Initialize Session & Load History
   useEffect(() => {
     const savedSessionId = localStorage.getItem('spvb_session_id');
-    const savedHiddenIds = localStorage.getItem('spvb_hidden_downloads');
+    const savedHistory = localStorage.getItem('spvb_download_history');
 
-    if (savedHiddenIds) {
+    if (savedHistory) {
       try {
-        setHiddenDownloadIds(new Set(JSON.parse(savedHiddenIds)));
+        setHistory(JSON.parse(savedHistory));
       } catch (e) {
-        console.error('Failed to parse hidden downloads:', e);
+        console.error('Failed to parse history:', e);
       }
     }
 
@@ -155,13 +154,13 @@ function App() {
       createSession();
     }
 
-    // Try to extract YouTube cookies from browser (silently)
     const cookies = extractYouTubeCookies();
     if (cookies) {
       setUserCookies(cookies);
     }
   }, [createSession]);
 
+  // Poll Downloads
   useEffect(() => {
     if (!sessionId) return;
     const interval = setInterval(() => {
@@ -170,26 +169,31 @@ function App() {
     return () => clearInterval(interval);
   }, [sessionId, fetchDownloads]);
 
-  // Auto-download when download completes
+  // Auto-Download Completed Videos
   useEffect(() => {
     downloads.forEach((d) => {
-      if (
-        d.status === 'completed' &&
-        !autoDownloadCompleted.has(d.download_id)
-      ) {
-        setAutoDownloadCompleted(
-          new Set([...autoDownloadCompleted, d.download_id])
-        );
-
-        // Hide this download from view and save to localStorage
-        const newHiddenIds = new Set([...hiddenDownloadIds, d.download_id]);
-        setHiddenDownloadIds(newHiddenIds);
-        localStorage.setItem('spvb_hidden_downloads', JSON.stringify([...newHiddenIds]));
-
-        triggerAutoDownload(d.download_id);
+      if (d.status === 'completed') {
+        const existsInHistory = history.some(h => h.id === d.download_id);
+        if (!existsInHistory) {
+          // Add to history instead of auto-downloading
+          const newHistoryItem: HistoryItem = {
+            id: d.download_id,
+            url: d.url || url,
+            title: metadata?.title || 'Video',
+            thumbnail: metadata?.thumbnail || '',
+            platform: metadata?.platform || 'Unknown',
+            quality: selectedQuality,
+            downloadedAt: Date.now(),
+            metadata: metadata || undefined
+          };
+          const newHistory = [newHistoryItem, ...history];
+          setHistory(newHistory);
+          localStorage.setItem('spvb_download_history', JSON.stringify(newHistory));
+          setMessage('✅ Download completed! Check history to download file.');
+        }
       }
     });
-  }, [downloads, autoDownloadCompleted, hiddenDownloadIds, triggerAutoDownload]);
+  }, [downloads, history, metadata, selectedQuality, url]);
 
   const fetchMetadata = async () => {
     if (!url || !sessionId) {
@@ -205,7 +209,7 @@ function App() {
         body: JSON.stringify({
           url,
           session_id: sessionId,
-          user_cookies: userCookies, // Send user's YouTube cookies
+          user_cookies: userCookies,
         }),
       });
 
@@ -213,7 +217,7 @@ function App() {
       if (data.success) {
         setMetadata(data.metadata);
         setSelectedQuality(data.metadata.qualities[0]?.value?.toString() || 'best');
-        setMessage(`✅ Ready`);
+        setMessage('✅ Ready to download');
       } else {
         setMessage(`❌ ${data.message || 'Failed'}`);
       }
@@ -239,13 +243,13 @@ function App() {
           url,
           session_id: sessionId,
           quality: selectedQuality,
-          user_cookies: userCookies, // Send user's YouTube cookies
+          user_cookies: userCookies,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setMessage(`⏳ Downloading...`);
+        setMessage('⏳ Downloading...');
         fetchDownloads();
       } else {
         setMessage(`❌ ${data.message || 'Failed'}`);
@@ -257,98 +261,92 @@ function App() {
     }
   };
 
+  const redownloadFromHistory = async (item: HistoryItem) => {
+    // Download file from history
+    try {
+      const download = downloads.find(d => d.download_id === item.id);
+      if (download) {
+        await triggerAutoDownload(item.id);
+      }
+    } catch (error) {
+      setMessage(`❌ Download failed: ${error}`);
+    }
+  };
+
+  const deleteFromHistory = (id: string) => {
+    const newHistory = history.filter(h => h.id !== id);
+    setHistory(newHistory);
+    localStorage.setItem('spvb_download_history', JSON.stringify(newHistory));
+    setMessage('✅ Removed from history');
+  };
+
   const endSession = async () => {
     try {
-      setMessage(`🔄 Ending session...`);
-
-      const res = await apiCall(
-        `${apiUrl}/api/session/end?session_id=${sessionId}`,
-        { method: 'POST' }
-      );
-
-      const data = await res.json();
-      if (data.success) {
-        setMessage(`✅ Session ended`);
-        setSessionId('');
-        setUrl('');
-        setMetadata(null);
-        setDownloads([]);
-        setShowHistory(false);
-        setHiddenDownloadIds(new Set());
-        setAutoDownloadCompleted(new Set());
-        localStorage.removeItem('spvb_session_id');
-        localStorage.removeItem('spvb_hidden_downloads');
-
-        setTimeout(() => createSession(), 1000);
-      }
+      await apiCall(`${apiUrl}/api/session/end?session_id=${sessionId}`, { method: 'POST' });
+      setSessionId('');
+      setUrl('');
+      setMetadata(null);
+      setDownloads([]);
+      localStorage.removeItem('spvb_session_id');
+      setTimeout(() => createSession(), 1000);
     } catch (error) {
       setMessage(`❌ Error: ${error}`);
     }
   };
 
-  // Filter out hidden downloads (completed downloads that user has already seen)
-  const activeDownloads = downloads.filter(
-    (d) => d.status !== 'completed' && !hiddenDownloadIds.has(d.download_id)
-  );
-
-  // Show completed downloads only in history modal
-  const completedDownloads = downloads.filter((d) => d.status === 'completed');
+  const activeDownloads = downloads.filter(d => d.status !== 'completed');
 
   return (
     <div className="app">
       <div className="background-animation"></div>
 
       <div className="container">
+        {/* Header */}
         <header className="header">
           <div className="header-content">
-            <img src="/logo.png" alt="SPVB Logo" className="logo-icon" />
-            <h1>SPVB Downloader</h1>
-            <p>Download videos from YouTube, Instagram, Facebook, TikTok, Twitter & More</p>
+            <h1>📥 SPVB Downloader</h1>
+            <p>Download from YouTube, Instagram, Facebook, TikTok, Twitter & More</p>
           </div>
         </header>
 
+        {/* Message */}
         {message && (
           <div className={`message ${message.includes('✅') || message.includes('⏳') ? 'success' : 'error'}`}>
-            <span className="message-icon">{message.includes('❌') ? '✕' : '✓'}</span>
             {message}
           </div>
         )}
 
-        <div className="session-controls">
-          <div className="session-info">
-            <div className="session-status">
-              <div className="status-dot"></div>
-              <span>Active</span>
-            </div>
-            <code>{sessionId?.substring(0, 10)}...</code>
-          </div>
-          <div className="session-actions">
-            {completedDownloads.length > 0 && (
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className={`btn btn-small ${showHistory ? 'btn-active' : ''}`}
-              >
-                📋 History ({completedDownloads.length})
-              </button>
-            )}
-            <button onClick={createSession} className="btn btn-small">
-              ↻ New
-            </button>
-            <button onClick={endSession} className="btn btn-small btn-danger">
-              ✕ End
-            </button>
-          </div>
+        {/* Tab Navigation */}
+        <div className="tabs">
+          <button
+            className={`tab ${activeTab === 'download' ? 'active' : ''}`}
+            onClick={() => setActiveTab('download')}
+          >
+            ⬇️ Download
+          </button>
+          <button
+            className={`tab ${activeTab === 'history' ? 'active' : ''}`}
+            onClick={() => setActiveTab('history')}
+          >
+            📋 History ({history.length})
+          </button>
+          <button
+            className={`tab session-btn`}
+            onClick={endSession}
+          >
+            🔄 New Session
+          </button>
         </div>
 
-        {/* MAIN CONTENT */}
-        <div className="main-content">
-          {/* INPUT & METADATA */}
-          <div className="input-section">
+        {/* Download Tab */}
+        {activeTab === 'download' && (
+          <div className="download-section">
+            {/* URL Input */}
             <div className="card input-card">
               <div className="input-group">
                 <input
                   type="text"
-                  placeholder="Paste video URL here..."
+                  placeholder="Paste video URL..."
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   className="input-url"
@@ -359,50 +357,30 @@ function App() {
                   disabled={loading || !url}
                   className="btn btn-primary"
                 >
-                  <span className="btn-icon">🔍</span>
-                  Get Info
+                  🔍 Get Info
                 </button>
               </div>
             </div>
 
+            {/* Metadata Display */}
             {metadata && (
               <div className="card metadata-card">
-                <div className="metadata-container">
+                <div className="metadata-grid">
                   {metadata.thumbnail && (
-                    <div className="thumbnail-container">
-                      <img
-                        src={metadata.thumbnail}
-                        alt={metadata.title}
-                        className="thumbnail"
-                      />
-                      <div className="overlay">
-                        <div className="platform-badge">
-                          {metadata.platform.toUpperCase()}
-                        </div>
-                        <div className="duration-badge">
-                          ⏱ {Math.floor(metadata.duration / 60)}m
-                        </div>
-                      </div>
-                    </div>
+                    <img src={metadata.thumbnail} alt={metadata.title} className="thumbnail" />
                   )}
+                  <div className="metadata-info">
+                    <h2>{metadata.title}</h2>
+                    <div className="metadata-details">
+                      <p>👤 {metadata.uploader || 'Unknown'}</p>
+                      <p>⏱️ {Math.floor(metadata.duration / 60)} minutes</p>
+                      <p>📺 {metadata.platform}</p>
+                      {metadata.is_age_restricted && <p className="warning">⚠️ Age Restricted</p>}
+                    </div>
 
-                  <div className="metadata-details">
-                    <h2 className="video-title">{metadata.title}</h2>
-
-                    {metadata.uploader && (
-                      <p className="uploader">
-                        <span>👤</span> {metadata.uploader}
-                      </p>
-                    )}
-
-                    {metadata.is_age_restricted && (
-                      <div className="warning">
-                        <span>⚠</span> Age-Restricted
-                      </div>
-                    )}
-
+                    {/* Quality Selection */}
                     <div className="quality-group">
-                      <label>Quality</label>
+                      <label>Select Quality:</label>
                       <select
                         value={selectedQuality}
                         onChange={(e) => setSelectedQuality(e.target.value)}
@@ -421,80 +399,84 @@ function App() {
                       disabled={loading}
                       className="btn btn-download"
                     >
-                      <span className="btn-icon">⬇</span>
-                      {loading ? 'Processing...' : 'Start Download'}
+                      {loading ? '⏳ Processing...' : '⬇️ Download'}
                     </button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ACTIVE DOWNLOADS */}
+            {/* Active Downloads */}
             {activeDownloads.length > 0 && (
-              <div className="card progress-card">
+              <div className="card downloads-card">
                 <h3>📥 Downloading ({activeDownloads.length})</h3>
-                <div className="progress-list">
+                <div className="downloads-list">
                   {activeDownloads.map((d) => (
-                    <div key={d.download_id} className="progress-item">
+                    <div key={d.download_id} className="download-item">
                       <div className="progress-info">
-                        <span className="status-badge">⟳ {d.status.toUpperCase()}</span>
-                        <span className="progress-percent">{d.progress}%</span>
+                        <span className="status">{d.status.toUpperCase()}</span>
+                        <span className="percentage">{d.progress}%</span>
                       </div>
-                      <div className="progress-bar-container">
+                      <div className="progress-bar-wrapper">
                         <div className="progress-bar">
                           <div className="progress-fill" style={{ width: `${d.progress}%` }} />
                         </div>
                       </div>
-                      {d.error && <p className="error-text">❌ {d.error}</p>}
+                      {d.error && <p className="error">❌ {d.error}</p>}
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
+        )}
 
-          {/* HISTORY MODAL */}
-          {showHistory && completedDownloads.length > 0 && (
-            <div className="history-modal">
-              <div className="history-backdrop" onClick={() => setShowHistory(false)}></div>
-              <div className="history-panel">
-                <div className="history-header">
-                  <h3>✓ Download History</h3>
-                  <button
-                    onClick={() => setShowHistory(false)}
-                    className="btn-close"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="history-list">
-                  {completedDownloads.map((d) => (
-                    <div key={d.download_id} className="history-item">
-                      <div className="checkmark">✓</div>
-                      <div className="history-details">
-                        <p className="history-id">ID: {d.download_id.substring(0, 8)}</p>
-                        <p className="history-status">Completed</p>
+        {/* History Tab */}
+        {activeTab === 'history' && (
+          <div className="history-section">
+            {history.length === 0 ? (
+              <div className="empty-state">
+                <p>📭 No downloads yet</p>
+              </div>
+            ) : (
+              <div className="history-grid">
+                {history.map((item) => (
+                  <div key={item.id} className="history-card">
+                    {item.thumbnail && (
+                      <img src={item.thumbnail} alt={item.title} className="history-thumbnail" />
+                    )}
+                    <div className="history-content">
+                      <h4>{item.title}</h4>
+                      <p className="platform">{item.platform}</p>
+                      <p className="quality">Quality: {item.quality}p</p>
+                      <p className="time">
+                        {new Date(item.downloadedAt).toLocaleDateString()}
+                      </p>
+                      <div className="history-actions">
+                        <button
+                          onClick={() => redownloadFromHistory(item)}
+                          className="btn btn-small btn-secondary"
+                        >
+                          ⬇️ Redownload
+                        </button>
+                        <button
+                          onClick={() => deleteFromHistory(item.id)}
+                          className="btn btn-small btn-danger"
+                        >
+                          🗑️
+                        </button>
                       </div>
                     </div>
-                  ))}
-                </div>
-
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="btn btn-primary"
-                  style={{ width: '100%', marginTop: '15px' }}
-                >
-                  Close
-                </button>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       <footer className="footer">
-        <p>🔐 Session-based • Auto-cleanup after 30 minutes • No login required</p>
+        <p>✨ Download • History • Re-download • No login required ✨</p>
       </footer>
     </div>
   );

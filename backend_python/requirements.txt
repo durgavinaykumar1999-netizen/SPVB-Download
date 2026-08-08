@@ -15,7 +15,6 @@ cloudinary==1.36.0
 # Video Downloading
 yt-dlp>=2024.8.0
 instaloader>=4.13
-pytubefix>=6.2.0
 
 # HTTP Client
 aiohttp==3.9.1
