@@ -43,7 +43,7 @@ class FacebookProvider:
             logger.error(f"Facebook metadata error: {str(e)}")
             raise
 
-    async def download(self, url: str, quality: str, save_path: str):
+    async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         try:
             if quality == 'best':
                 quality_value = 'bestvideo+bestaudio/best'

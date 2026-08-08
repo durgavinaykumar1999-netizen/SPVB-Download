@@ -60,7 +60,7 @@ class TikTokProvider:
             logger.error(f"TikTok metadata error: {str(e)}")
             raise
 
-    async def download(self, url: str, quality: str, save_path: str):
+    async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         """Download TikTok video using yt-dlp (handles auth/tokens internally)"""
         try:
             quality_value = 'best' if quality == 'best' else f'bestvideo[height<={quality}]+bestaudio/best'

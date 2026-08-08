@@ -92,7 +92,7 @@ class InstagramProvider:
             return url.split('/reel/')[1].rstrip('/')
         raise ValueError("Invalid Instagram URL")
 
-    async def download(self, url: str, quality: str, save_path: str):
+    async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         try:
             if quality == 'best':
                 quality_value = 'bestvideo+bestaudio/best'
