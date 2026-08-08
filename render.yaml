@@ -3,5 +3,5 @@ services:
     name: spvb-downloader
     runtime: python
     runtimeVersion: 3.12.0
-    buildCommand: pip install -r backend_python/backend_python/backend_python/requirements.txt
-    startCommand: uvicorn backend_python.backend_python.backend_python.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r backend_python/requirements.txt
+    startCommand: uvicorn backend_python.main:app --host 0.0.0.0 --port $PORT
