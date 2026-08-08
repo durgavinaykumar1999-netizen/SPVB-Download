@@ -22,50 +22,36 @@ class YouTubeProvider:
             return f"https://www.youtube.com/watch?v={video_id}"
         return url
 
-    def _get_ydl_opts(self, download: bool = False, save_path: str = None, use_cookies: bool = True):
-        """Get yt-dlp options with proper authentication handling"""
+    def _get_ydl_opts(self, download: bool = False, save_path: str = None):
+        """Get yt-dlp options - let yt-dlp auto-select best player (usually Android VR)"""
         opts = {
             'quiet': False,
             'no_warnings': False,
-            'skip_unavailable_fragments': True,
             'socket_timeout': 30,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
-                'Sec-Fetch-Mode': 'navigate',
-            },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web', 'android'],
-                    'player_skip_js_player': False,
-                }
-            },
-            'retries': 5,
-            'fragment_retries': 5,
+            'retries': 10,
+            'fragment_retries': 10,
             'skip_unavailable_fragments': True,
             'keep_fragments': False,
         }
 
-        # Try to use cookies from browser if available
-        if use_cookies:
-            opts['cookiesfrombrowser'] = 'chrome'  # Try to extract from Chrome
+        # Don't force specific player - let yt-dlp auto-select
+        # Android VR player works best and doesn't need cookies
+        # yt-dlp will try: web → android → android_vr → ios → mweb
 
         if download and save_path:
             opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
-            opts['quiet'] = True  # Only show warnings for downloads
+            opts['quiet'] = True
             opts['no_warnings'] = False
 
         return opts
 
     async def get_metadata(self, url: str):
-        """Extract metadata using yt-dlp with Android API fallback"""
+        """Extract metadata using yt-dlp with Android API"""
         try:
             url = self._normalize_url(url)
 
-            # Use yt-dlp - it handles all videos including with Android API fallback
-            ydl_opts = self._get_ydl_opts(download=False, use_cookies=False)
+            # Use yt-dlp with Android player (no cookies needed)
+            ydl_opts = self._get_ydl_opts(download=False)
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -99,7 +85,7 @@ class YouTubeProvider:
             raise
 
     async def download(self, url: str, quality: str, save_path: str):
-        """Download YouTube video using yt-dlp with Android API fallback"""
+        """Download YouTube video using yt-dlp with Android API"""
         try:
             url = self._normalize_url(url)
 
@@ -109,8 +95,8 @@ class YouTubeProvider:
             else:
                 quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
 
-            # Use yt-dlp - handles all videos with Android API fallback
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, use_cookies=False)
+            # Use yt-dlp with Android player (no cookies needed on server)
+            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path)
             ydl_opts['format'] = quality_value
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
