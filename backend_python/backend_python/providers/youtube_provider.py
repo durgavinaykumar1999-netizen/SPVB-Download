@@ -111,31 +111,35 @@ class YouTubeProvider:
                     pass
 
             # Fallback to yt-dlp with cookies
-            logger.info("Trying yt-dlp with cookies...")
             ydl_opts = self._get_ydl_opts(download=False, use_cookies=True)
             info = None
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
                     info = ydl.extract_info(url, download=False)
-                    logger.info(f"✅ Metadata extracted with yt-dlp (cookies)")
                 except yt_dlp.utils.DownloadError as e:
                     error_msg = str(e)
                     if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-                        logger.warning(f"Bot detection - trying without cookies: {error_msg}")
-                    else:
-                        logger.warning(f"Extraction failed: {error_msg}")
+                        # This video requires authentication or is bot-protected
+                        raise Exception(
+                            "⚠️ This video is age-restricted or requires login. "
+                            "YouTube bot detection is blocking access. "
+                            "Please try downloading with a YouTube login or use YouTube's official app."
+                        )
 
-            # Fallback: try yt-dlp without cookies requirement
+            # Fallback: try yt-dlp without cookies
             if info is None:
-                logger.info("Retrying yt-dlp without strict cookie requirement...")
                 ydl_opts = self._get_ydl_opts(download=False, use_cookies=False)
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     try:
                         info = ydl.extract_info(url, download=False)
-                        logger.info("✅ Metadata extracted with yt-dlp fallback")
                     except Exception as e2:
-                        logger.error(f"All extraction methods failed: {str(e2)}")
+                        error_str = str(e2)
+                        if "Sign in to confirm" in error_str or "bot" in error_str.lower():
+                            raise Exception(
+                                "⚠️ This video is age-restricted or requires login. "
+                                "Please try downloading with YouTube login or official app."
+                            )
                         raise
 
             formats = info.get('formats', [])
@@ -211,8 +215,6 @@ class YouTubeProvider:
                     pass
 
             # Fallback to yt-dlp with cookies
-            logger.info("Trying yt-dlp with cookies...")
-
             # Format string for best quality at specified height
             if quality == 'best':
                 quality_value = 'bestvideo+bestaudio/best'
@@ -230,7 +232,7 @@ class YouTubeProvider:
                     filename = ydl.prepare_filename(info)
                     download_succeeded = True
 
-                    logger.info(f"✅ Downloaded with yt-dlp: {info.get('title', '')} at quality {quality}")
+                    logger.info(f"✅ YouTube download: {info.get('title', '')}")
 
                     return {
                         'success': True,
@@ -241,9 +243,11 @@ class YouTubeProvider:
                 except yt_dlp.utils.DownloadError as e:
                     error_msg = str(e)
                     if "Sign in to confirm" in error_msg or "bot" in error_msg.lower():
-                        logger.warning(f"⚠️ Bot detection triggered, trying alternative method...")
-                    else:
-                        logger.warning(f"Download failed: {error_msg}, trying alternatives...")
+                        raise Exception(
+                            "⚠️ This video is age-restricted or requires login. "
+                            "YouTube bot detection is blocking access. "
+                            "Please try with YouTube login or official app."
+                        )
 
             # Fallback: try without strict cookie requirement
             if not download_succeeded:
