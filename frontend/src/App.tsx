@@ -236,7 +236,7 @@ function App() {
     }
   };
 
-  const autoDownloadFile = async (downloadId: string, filename: string) => {
+  const autoDownloadFile = useCallback(async (downloadId: string, filename: string) => {
     try {
       const res = await apiCall(`${apiUrl}/api/download/${downloadId}/auto-download?session_id=${sessionId}`);
       if (!res.ok) throw new Error('Auto-download failed');
@@ -257,7 +257,7 @@ function App() {
     } catch (error) {
       push(`⚠️ File ready but auto-download failed: ${error}`, 'error');
     }
-  };
+  }, [apiUrl, sessionId, push]);
 
   useEffect(() => {
     if (downloads.length > 0) {
@@ -275,7 +275,7 @@ function App() {
         push(`❌ Download error: ${latestDownload.error}`, 'error');
       }
     }
-  }, [downloads]);
+  }, [downloads, autoDownloadFile, push]);
 
   const startDownload = async () => {
     if (!url || !sessionId) {
