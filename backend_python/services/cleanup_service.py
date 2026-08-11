@@ -40,17 +40,24 @@ class CleanupService:
             time.sleep(300)
 
     async def _cleanup_expired_sessions(self):
-        """Find and delete all expired sessions with their downloads and files"""
+        """Find and delete inactive sessions with their downloads and files"""
         try:
             self.db._ensure_connected()
+            from ..config.env import config
+
             # Get all sessions
             sessions = list(self.db.sessions.find({}))
+            now = datetime.utcnow()
 
             for session in sessions:
-                # Check if session is expired
-                expires_at = session.get("expires_at")
-                if expires_at and datetime.utcnow() > expires_at:
+                # Check if session is inactive for too long
+                last_activity = session.get("last_activity", session.get("created_at"))
+                inactivity_duration = (now - last_activity).total_seconds()
+
+                # Cleanup if inactive for more than session_inactivity_timeout
+                if inactivity_duration > config.session_inactivity_timeout:
                     session_id = session.get("session_id")
+                    logger.info(f"Session {session_id} inactive for {int(inactivity_duration)}s, cleaning up...")
                     await self._delete_session_data(session_id)
         except Exception as e:
             logger.error(f"Error in cleanup_expired_sessions: {str(e)}")

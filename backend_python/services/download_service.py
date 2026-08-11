@@ -24,6 +24,8 @@ class DownloadService:
     async def queue_download(self, download_id: str, session_id: str, url: str, quality: str, user_cookies: str = None):
         try:
             download = await self.db.create_download(download_id, session_id, url, quality)
+            # Update session activity when new download is queued
+            await self.db.update_session_activity(session_id)
 
             self.queue.add_download({
                 "download_id": download_id,

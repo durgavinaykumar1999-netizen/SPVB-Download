@@ -67,12 +67,14 @@ class MongoDBService:
     async def create_session(self, session_id: str):
         self._ensure_connected()
         try:
-            expires_at = datetime.utcnow() + timedelta(seconds=config.session_timeout)
+            now = datetime.utcnow()
+            expires_at = now + timedelta(seconds=config.session_timeout)
 
             session = {
                 "session_id": session_id,
-                "created_at": datetime.utcnow(),
+                "created_at": now,
                 "expires_at": expires_at,
+                "last_activity": now,
                 "save_path": config.save_path,
                 "downloads": []
             }
@@ -179,7 +181,20 @@ class MongoDBService:
         self._ensure_connected()
         try:
             downloads = list(self.downloads.find({"session_id": session_id}))
+            # Update session activity
+            await self.update_session_activity(session_id)
             return [serialize_doc(d) for d in downloads]
         except Exception as e:
             logger.error(f"List downloads error: {str(e)}")
             raise
+
+    async def update_session_activity(self, session_id: str):
+        """Update last_activity timestamp for session."""
+        self._ensure_connected()
+        try:
+            self.sessions.update_one(
+                {"session_id": session_id},
+                {"$set": {"last_activity": datetime.utcnow()}}
+            )
+        except Exception as e:
+            logger.warning(f"Failed to update session activity: {str(e)}")
