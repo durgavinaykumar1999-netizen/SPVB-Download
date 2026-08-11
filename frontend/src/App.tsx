@@ -300,26 +300,6 @@ function App() {
     push('✅ Removed from history');
   };
 
-  const newSession = () => {
-    createSession();
-    setPhase('idle');
-    setMetadata(null);
-    setUrl('');
-  };
-
-  const endSession = async () => {
-    try {
-      await apiCall(`${apiUrl}/api/session/end?session_id=${sessionId}`, { method: 'POST' });
-      setSessionId('');
-      setUrl('');
-      setMetadata(null);
-      setDownloads([]);
-      localStorage.removeItem('spvb_session_id');
-      setTimeout(() => createSession(), 1000);
-    } catch (error) {
-      push(`❌ Error: ${error}`, 'error');
-    }
-  };
 
   const handlePaste = async () => {
     if (url) {
