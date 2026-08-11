@@ -102,7 +102,7 @@ function App() {
   const [sessionId, setSessionId] = useState<string>('');
   const [url, setUrl] = useState<string>('');
   const [metadata, setMetadata] = useState<Metadata | null>(null);
-  const [selectedQuality, setSelectedQuality] = useState<string>('best');
+  const [selectedQuality, setSelectedQuality] = useState<string | number>('best');
   const [downloads, setDownloads] = useState<Download[]>([]);
   const [userCookies, setUserCookies] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
@@ -285,13 +285,14 @@ function App() {
 
     setDownloadState('preparing');
     try {
+      const qualityStr = typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality;
       const res = await apiCall(`${apiUrl}/api/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url,
           session_id: sessionId,
-          quality: selectedQuality,
+          quality: qualityStr,
           user_cookies: userCookies,
         }),
       });
@@ -553,7 +554,7 @@ function ResultCard({ data, selectedQuality, setSelectedQuality, onDownload, dow
           ) : downloadState === 'complete' ? (
             <>✅ Complete</>
           ) : (
-            <>⬇️ Download {selectedQuality}p</>
+            <>⬇️ Download {typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality}</>
           )}
         </button>
 
