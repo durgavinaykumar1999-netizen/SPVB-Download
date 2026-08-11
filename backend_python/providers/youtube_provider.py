@@ -256,10 +256,12 @@ class YouTubeProvider:
             "noplaylist": True,
             "ffmpeg_location": self.ffmpeg_path,
             "socket_timeout": 60,
-            "retries": 5,
-            "fragment_retries": 5,
-            "file_access_retries": 5,
-            "extractor_retries": 3,
+            "retries": 10,
+            "fragment_retries": 10,
+            "file_access_retries": 10,
+            "extractor_retries": 5,
+            "sleep_interval": 2,
+            "max_sleep_interval": 5,
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 "
@@ -270,12 +272,16 @@ class YouTubeProvider:
                     "Safari/537.36"
                 ),
                 "Accept-Language": "en-US,en;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             },
+            "force_ipv4": True,
+            "impersonate": "Chrome120",
         }
 
         # JavaScript runtime configuration - must be dictionary format
         if self.node_path:
             opts["js_runtimes"] = {"node": {}}
+            opts["js_runtimes"]["node"]["args"] = "--max-old-space-size=2048"
         else:
             logger.warning("Node.js not found - YouTube extraction may fail for some content")
 
