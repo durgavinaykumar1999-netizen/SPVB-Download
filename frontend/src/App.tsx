@@ -112,6 +112,7 @@ function App() {
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
+  const autoDownloadedRef = useRef<Set<string>>(new Set());
 
   const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
     return fetch(url, options);
@@ -267,15 +268,34 @@ function App() {
         setDownloadState(`downloading_${progress}`);
       } else if (latestDownload.status === 'completed') {
         setDownloadState('complete');
-        if (latestDownload.filename) {
+        // Only auto-download once per download ID
+        if (latestDownload.filename && !autoDownloadedRef.current.has(latestDownload.download_id)) {
+          autoDownloadedRef.current.add(latestDownload.download_id);
           autoDownloadFile(latestDownload.download_id, latestDownload.filename);
+
+          // Save to history
+          const historyItem: HistoryItem = {
+            id: latestDownload.download_id,
+            url: url || '',
+            title: metadata?.title || 'Unknown Video',
+            thumbnail: metadata?.thumbnail || '',
+            platform: metadata?.platform || 'Unknown',
+            quality: typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality,
+            downloadedAt: Date.now(),
+            metadata: metadata || undefined,
+          };
+          setHistory(prev => {
+            const updated = [historyItem, ...prev];
+            localStorage.setItem('spvb_download_history', JSON.stringify(updated));
+            return updated;
+          });
         }
       } else if (latestDownload.status === 'error') {
         setDownloadState(null);
         push(`❌ Download error: ${latestDownload.error}`, 'error');
       }
     }
-  }, [downloads, autoDownloadFile, push]);
+  }, [downloads, autoDownloadFile, push, url, metadata, selectedQuality]);
 
   const startDownload = async () => {
     if (!url || !sessionId) {
@@ -283,6 +303,8 @@ function App() {
       return;
     }
 
+    // Clear the auto-download tracking for new downloads
+    autoDownloadedRef.current.clear();
     setDownloadState('preparing');
     try {
       const qualityStr = typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality;
