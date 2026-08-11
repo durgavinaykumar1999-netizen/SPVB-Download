@@ -42,6 +42,7 @@ class CleanupService:
     async def _cleanup_expired_sessions(self):
         """Find and delete all expired sessions with their downloads and files"""
         try:
+            self.db._ensure_connected()
             # Get all sessions
             sessions = list(self.db.sessions.find({}))
 
@@ -57,6 +58,7 @@ class CleanupService:
     async def _delete_session_data(self, session_id: str):
         """Delete all data related to a session"""
         try:
+            self.db._ensure_connected()
             logger.info(f"Starting cleanup for session: {session_id}")
 
             # Get all downloads for this session

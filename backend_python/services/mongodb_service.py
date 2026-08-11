@@ -32,11 +32,27 @@ def serialize_doc(doc):
 
 class MongoDBService:
     def __init__(self):
-        self.client = MongoClient(config.mongodb_uri)
-        self.db = self.client[config.mongodb_db_name]
-        self.sessions = self.db["sessions"]
-        self.downloads = self.db["downloads"]
-        self._create_indexes()
+        self.client = None
+        self.db = None
+        self.sessions = None
+        self.downloads = None
+        self._connected = False
+
+    def _ensure_connected(self):
+        if self._connected:
+            return
+        try:
+            self.client = MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=5000)
+            self.client.admin.command('ping')
+            self.db = self.client[config.mongodb_db_name]
+            self.sessions = self.db["sessions"]
+            self.downloads = self.db["downloads"]
+            self._create_indexes()
+            self._connected = True
+            logger.info("MongoDB connected")
+        except Exception as e:
+            logger.error(f"MongoDB connection failed: {str(e)}")
+            raise
 
     def _create_indexes(self):
         try:
@@ -49,6 +65,7 @@ class MongoDBService:
             logger.error(f"Index creation error: {str(e)}")
 
     async def create_session(self, session_id: str):
+        self._ensure_connected()
         try:
             expires_at = datetime.utcnow() + timedelta(seconds=config.session_timeout)
 
@@ -69,6 +86,7 @@ class MongoDBService:
             raise
 
     async def get_session(self, session_id: str):
+        self._ensure_connected()
         try:
             session = self.sessions.find_one({"session_id": session_id})
 
@@ -85,6 +103,7 @@ class MongoDBService:
             raise
 
     async def update_session(self, session_id: str, data: dict):
+        self._ensure_connected()
         try:
             self.sessions.update_one(
                 {"session_id": session_id},
@@ -96,6 +115,7 @@ class MongoDBService:
             raise
 
     async def delete_session(self, session_id: str):
+        self._ensure_connected()
         try:
             self.sessions.delete_one({"session_id": session_id})
             self.downloads.delete_many({"session_id": session_id})
@@ -105,6 +125,7 @@ class MongoDBService:
             raise
 
     async def create_download(self, download_id: str, session_id: str, url: str, quality: str):
+        self._ensure_connected()
         try:
             download = {
                 "download_id": download_id,
@@ -130,6 +151,7 @@ class MongoDBService:
             raise
 
     async def get_download(self, download_id: str):
+        self._ensure_connected()
         try:
             download = self.downloads.find_one({"download_id": download_id})
 
@@ -142,6 +164,7 @@ class MongoDBService:
             raise
 
     async def update_download(self, download_id: str, data: dict):
+        self._ensure_connected()
         try:
             self.downloads.update_one(
                 {"download_id": download_id},
@@ -153,6 +176,7 @@ class MongoDBService:
             raise
 
     async def list_downloads(self, session_id: str):
+        self._ensure_connected()
         try:
             downloads = list(self.downloads.find({"session_id": session_id}))
             return [serialize_doc(d) for d in downloads]
