@@ -236,6 +236,47 @@ function App() {
     }
   };
 
+  const autoDownloadFile = async (downloadId: string, filename: string) => {
+    try {
+      const res = await apiCall(`${apiUrl}/api/download/${downloadId}/auto-download?session_id=${sessionId}`);
+      if (!res.ok) throw new Error('Auto-download failed');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || `download-${downloadId}`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 100);
+
+      push('✅ Download complete!');
+    } catch (error) {
+      push(`⚠️ File ready but auto-download failed: ${error}`, 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (downloads.length > 0) {
+      const latestDownload = downloads[downloads.length - 1];
+      if (latestDownload.status === 'downloading') {
+        const progress = latestDownload.progress || 0;
+        setDownloadState(`downloading_${progress}`);
+      } else if (latestDownload.status === 'completed') {
+        setDownloadState('complete');
+        if (latestDownload.filename) {
+          autoDownloadFile(latestDownload.download_id, latestDownload.filename);
+        }
+      } else if (latestDownload.status === 'error') {
+        setDownloadState(null);
+        push(`❌ Download error: ${latestDownload.error}`, 'error');
+      }
+    }
+  }, [downloads]);
+
   const startDownload = async () => {
     if (!url || !sessionId) {
       push('❌ Please enter URL', 'error');

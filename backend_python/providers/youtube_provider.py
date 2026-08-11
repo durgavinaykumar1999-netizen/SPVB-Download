@@ -1,151 +1,489 @@
-import yt_dlp
+import asyncio
+import json
+import logging
 import os
+import re
+import shutil
+import subprocess
 import tempfile
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import yt_dlp
+
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
 
 
 class YouTubeProvider:
+
     def __init__(self):
         self.platform = "youtube"
 
-    def _normalize_url(self, url: str) -> str:
-        """Convert YouTube Shorts URLs to standard format"""
-        if "/shorts/" in url:
-            # Extract video ID from shorts URL and convert to standard format
-            video_id = url.split("/shorts/")[1].split("?")[0]
-            return f"https://www.youtube.com/watch?v={video_id}"
+        self.ffmpeg_path = (
+            shutil.which("ffmpeg")
+            or "/usr/bin/ffmpeg"
+        )
+
+        # Detect Node.js
+        self.node_path = self._find_node()
+
+        logger.info(
+            "yt-dlp version: %s",
+            yt_dlp.version.__version__
+        )
+
+        logger.info(
+            "Node.js: %s",
+            self.node_path or "NOT FOUND"
+        )
+
+        logger.info(
+            "FFmpeg: %s",
+            self.ffmpeg_path or "NOT FOUND"
+        )
+
+        if self.node_path:
+            node_version = self._get_node_version()
+            logger.info(
+                "Node.js version: %s",
+                node_version or "unknown"
+            )
+
+    def _find_node(self):
+        candidates = [
+            "/usr/bin/node",
+            "/usr/bin/nodejs",
+            "/opt/nodejs/bin/node",
+        ]
+
+        for path in candidates:
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
+
+        return shutil.which("node") or shutil.which("nodejs")
+
+    def _get_node_version(self):
+        if not self.node_path:
+            return None
+
+        try:
+            result = subprocess.run(
+                [self.node_path, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+
+            if result.returncode == 0:
+                return result.stdout.strip()
+
+        except Exception:
+            pass
+
+        return None
+
+    def detect_url_type(self, url: str) -> str:
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        path = parsed.path.lower()
+
+        if "youtu.be" in host:
+            return "video"
+        if "/shorts/" in path:
+            return "short"
+        if "/embed/" in path:
+            return "embed"
+        if "/live/" in path:
+            return "live"
+
+        query = parse_qs(parsed.query)
+        if "v" in query:
+            return "video"
+
+        return "unknown"
+
+    def normalize_url(self, url: str) -> str:
+        if not url:
+            raise ValueError("YouTube URL cannot be empty")
+
+        url = url.strip()
+        parsed = urlparse(url)
+        host = parsed.netloc.lower()
+        path = parsed.path
+
+        if "youtu.be" in host:
+            video_id = path.strip("/").split("/")[0]
+            if video_id:
+                return f"https://www.youtube.com/watch?v={video_id}"
+
+        match = re.search(r"/shorts/([A-Za-z0-9_-]+)", path)
+        if match:
+            return f"https://www.youtube.com/watch?v={match.group(1)}"
+
+        match = re.search(r"/embed/([A-Za-z0-9_-]+)", path)
+        if match:
+            return f"https://www.youtube.com/watch?v={match.group(1)}"
+
+        match = re.search(r"/live/([A-Za-z0-9_-]+)", path)
+        if match:
+            return f"https://www.youtube.com/watch?v={match.group(1)}"
+
+        query = parse_qs(parsed.query)
+        if "v" in query:
+            return f"https://www.youtube.com/watch?v={query['v'][0]}"
+
         return url
 
-    def _get_ydl_opts(self, download: bool = False, save_path: str = None, user_cookies: str = None):
-        """Get yt-dlp options - use user's browser cookies if provided"""
+    def is_youtube_url(self, url: str) -> bool:
+        try:
+            parsed = urlparse(url)
+            host = parsed.netloc.lower()
+
+            allowed_hosts = [
+                "youtube.com",
+                "www.youtube.com",
+                "m.youtube.com",
+                "music.youtube.com",
+                "youtu.be",
+                "www.youtu.be",
+            ]
+
+            return any(
+                host == h or host.endswith("." + h)
+                for h in allowed_hosts
+            )
+
+        except Exception:
+            return False
+
+    def _create_cookie_file(self, user_cookies: str):
+        if not user_cookies:
+            return None
+
+        user_cookies = user_cookies.strip()
+        if not user_cookies:
+            return None
+
+        if "Netscape HTTP Cookie File" not in user_cookies:
+            logger.warning("Cookie data is not in Netscape format. Ignoring cookies.")
+            return None
+
+        try:
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".txt",
+                delete=False,
+                encoding="utf-8",
+            )
+
+            temp_file.write(user_cookies)
+            temp_file.close()
+
+            logger.info("Temporary YouTube cookie file created")
+            return temp_file.name
+
+        except Exception as e:
+            logger.warning(f"Could not create cookie file: {e}")
+            return None
+
+    def _get_ydl_opts(
+        self,
+        download: bool = False,
+        save_path: str = None,
+        user_cookies: str = None,
+        quality: str = "best",
+    ):
         opts = {
-            'quiet': False,
-            'no_warnings': False,
-            'socket_timeout': 60,
-            'retries': 3,
-            'fragment_retries': 3,
-            'skip_unavailable_fragments': True,
-            'keep_fragments': False,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept-Language': 'en-US,en;q=0.9',
+            "quiet": False,
+            "no_warnings": False,
+            "noplaylist": True,
+            "js_runtimes": {"node": {}},
+            "ffmpeg_location": self.ffmpeg_path,
+            "socket_timeout": 60,
+            "retries": 3,
+            "fragment_retries": 3,
+            "file_access_retries": 5,
+            "extractor_retries": 3,
+            "http_headers": {
+                "User-Agent": (
+                    "Mozilla/5.0 "
+                    "(X11; Linux x86_64) "
+                    "AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) "
+                    "Chrome/131.0.0.0 "
+                    "Safari/537.36"
+                ),
+                "Accept-Language": "en-US,en;q=0.9",
             },
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['web', 'android_vr', 'android'],
-                    'skip': ['hls', 'dash'],
-                }
-            },
-            'file_access_retries': 2,
-            'extractor_retries': 2,
-            'connection_speed': 20,
-            'throttledratelimit': 1000000,
         }
 
-        # Use user's browser cookies if provided (from their YouTube login)
-        if user_cookies and user_cookies.strip():
-            try:
-                # Validate cookie format before using
-                if 'Netscape HTTP Cookie File' in user_cookies and len(user_cookies) > 50:
-                    # Write user's cookies to temporary file
-                    temp_cookies = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding='utf-8')
-                    temp_cookies.write(user_cookies)
-                    temp_cookies.close()
-                    opts['cookiefile'] = temp_cookies.name
-                    logger.info(f"Using browser cookies for YouTube authentication")
-                else:
-                    logger.warning("Cookie format invalid, using anonymous download")
-            except Exception as e:
-                logger.warning(f"Failed to use cookies: {e}, falling back to anonymous")
+        cookie_file = self._create_cookie_file(user_cookies)
+        if cookie_file:
+            opts["cookiefile"] = cookie_file
+            opts["_temporary_cookie_file"] = cookie_file
 
-        if download and save_path:
-            opts['outtmpl'] = f"{save_path}/%(title)s.%(ext)s"
-            opts['quiet'] = True
-            opts['no_warnings'] = False
+        if download:
+            os.makedirs(save_path, exist_ok=True)
+            opts.update({
+                "format": self._get_format(quality),
+                "merge_output_format": "mp4",
+                "outtmpl": os.path.join(save_path, "%(title).200s.%(ext)s"),
+                "keep_fragments": False,
+                "continuedl": True,
+                "overwrites": False,
+            })
 
         return opts
 
-    async def get_metadata(self, url: str, user_cookies: str = None):
-        """Extract metadata using yt-dlp"""
+    def _get_format(self, quality: str):
+        if not quality or quality == "best":
+            return "bv*+ba/b"
+
         try:
-            url = self._normalize_url(url)
+            height = int(quality)
+            return f"bv*[height<={height}]+ba/b[height<={height}]"
+        except (ValueError, TypeError):
+            return "bv*+ba/b"
 
-            # Use user's cookies if provided
-            ydl_opts = self._get_ydl_opts(download=False, user_cookies=user_cookies)
+    def _cleanup_opts(self, opts):
+        cookie_file = opts.get("_temporary_cookie_file")
+        if cookie_file:
+            try:
+                if os.path.exists(cookie_file):
+                    os.unlink(cookie_file)
+            except Exception as e:
+                logger.warning(f"Could not remove temporary cookie file: {e}")
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+    async def get_metadata(self, url: str, user_cookies: str = None):
+        return await asyncio.to_thread(
+            self._get_metadata_sync,
+            url,
+            user_cookies
+        )
 
-            formats = info.get('formats', [])
-            qualities = []
+    def _get_metadata_sync(self, url: str, user_cookies: str = None):
+        original_url = url
+        url_type = self.detect_url_type(url)
+        normalized_url = self.normalize_url(url)
+
+        logger.info(f"Original URL: {original_url}")
+        logger.info(f"Normalized URL: {normalized_url}")
+        logger.info(f"Input type: {url_type}")
+
+        if not self.is_youtube_url(original_url):
+            raise ValueError("URL is not a valid YouTube URL")
+
+        opts = self._get_ydl_opts(download=False, user_cookies=user_cookies)
+
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(normalized_url, download=False)
+
+            formats = info.get("formats", [])
+            qualities = {}
 
             for fmt in formats:
-                if fmt.get('height') and fmt.get('vcodec') != 'none':  # Only video formats
-                    height = fmt.get('height')
-                    if height not in [q['value'] for q in qualities]:
-                        qualities.append({
-                            'label': f"{height}p",
-                            'value': height
-                        })
+                height = fmt.get("height")
+                if not height:
+                    continue
+                vcodec = fmt.get("vcodec")
+                if not vcodec or vcodec == "none":
+                    continue
 
-            qualities = sorted(qualities, key=lambda x: x['value'], reverse=True)
+                height = int(height)
+                qualities[height] = {
+                    "label": f"{height}p",
+                    "value": height,
+                }
+
+            sorted_qualities = sorted(
+                qualities.values(),
+                key=lambda x: x["value"],
+                reverse=True,
+            )
+
+            if not sorted_qualities:
+                sorted_qualities = [{"label": "best", "value": "best"}]
+
+            result = {
+                "success": True,
+                "platform": self.platform,
+                "url": original_url,
+                "normalized_url": normalized_url,
+                "url_type": url_type,
+                "id": info.get("id"),
+                "title": info.get("title", "Unknown"),
+                "description": info.get("description", ""),
+                "duration": info.get("duration", 0),
+                "thumbnail": info.get("thumbnail", ""),
+                "uploader": info.get("uploader", ""),
+                "channel": info.get("channel", ""),
+                "channel_id": info.get("channel_id", ""),
+                "view_count": info.get("view_count", 0),
+                "like_count": info.get("like_count"),
+                "upload_date": info.get("upload_date"),
+                "categories": info.get("categories", []),
+                "tags": info.get("tags", []),
+                "webpage_url": info.get("webpage_url", original_url),
+                "duration_string": info.get("duration_string"),
+                "age_limit": info.get("age_limit", 0),
+                "is_age_restricted": info.get("age_limit", 0) > 0,
+                "is_live": info.get("is_live", False),
+                "qualities": sorted_qualities,
+                "format_count": len(formats),
+            }
+
+            logger.info(f"YouTube metadata extracted: {result['title']}")
+            return result
+
+        except yt_dlp.utils.DownloadError as e:
+            logger.error(f"YouTube metadata error: {str(e)}")
+            raise RuntimeError(self._friendly_error(str(e))) from e
+
+        finally:
+            self._cleanup_opts(opts)
+
+    async def download(
+        self,
+        url: str,
+        quality: str,
+        save_path: str,
+        user_cookies: str = None
+    ):
+        return await asyncio.to_thread(
+            self._download_sync,
+            url,
+            quality,
+            save_path,
+            user_cookies
+        )
+
+    def _download_sync(
+        self,
+        url: str,
+        quality: str,
+        save_path: str,
+        user_cookies: str = None
+    ):
+        original_url = url
+        url_type = self.detect_url_type(url)
+        normalized_url = self.normalize_url(url)
+
+        logger.info("Starting YouTube download")
+        logger.info(f"Original URL: {original_url}")
+        logger.info(f"Normalized URL: {normalized_url}")
+        logger.info(f"Detected URL type: {url_type}")
+
+        format_string = self._get_format(quality)
+        logger.info(f"Format: {format_string}")
+
+        os.makedirs(save_path, exist_ok=True)
+
+        opts = self._get_ydl_opts(
+            download=True,
+            save_path=save_path,
+            user_cookies=user_cookies,
+            quality=quality
+        )
+
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(normalized_url, download=True)
+                filename = ydl.prepare_filename(info)
+
+            base_name = os.path.splitext(filename)[0]
+            possible_files = [
+                filename,
+                base_name + ".mp4",
+                base_name + ".mkv",
+                base_name + ".webm",
+            ]
+
+            final_file = None
+            for candidate in possible_files:
+                if os.path.exists(candidate):
+                    final_file = candidate
+                    break
+
+            if not final_file:
+                files = sorted(
+                    Path(save_path).glob("*"),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True,
+                )
+                if files:
+                    final_file = str(files[0])
+
+            if not final_file:
+                raise RuntimeError(
+                    "yt-dlp completed but output file could not be found."
+                )
+
+            file_size = os.path.getsize(final_file)
+
+            logger.info("YouTube download completed")
+            logger.info(f"File: {final_file}")
+            logger.info(f"Size: {file_size / (1024 * 1024):.2f} MB")
 
             return {
-                'title': info.get('title', 'Unknown'),
-                'duration': info.get('duration', 0),
-                'thumbnail': info.get('thumbnail', ''),
-                'uploader': info.get('uploader', ''),
-                'view_count': info.get('view_count', 0),
-                'qualities': qualities if qualities else [{'label': 'best', 'value': 'best'}],
-                'platform': self.platform,
-                'is_age_restricted': info.get('age_limit', 0) > 0
+                "success": True,
+                "platform": self.platform,
+                "url": original_url,
+                "normalized_url": normalized_url,
+                "url_type": url_type,
+                "id": info.get("id"),
+                "title": info.get("title", ""),
+                "filename": final_file,
+                "filepath": final_file,
+                "file_size": file_size,
+                "format": info.get("ext", "mp4"),
+                "duration": info.get("duration", 0),
+                "thumbnail": info.get("thumbnail", ""),
+                "uploader": info.get("uploader", ""),
             }
-        except Exception as e:
-            logger.error(f"YouTube metadata error: {str(e)}")
-            raise
 
-    async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
-        """Download YouTube video using yt-dlp with user's YouTube cookies"""
-        try:
-            is_short = "/shorts/" in url
-            url = self._normalize_url(url)
+        except yt_dlp.utils.DownloadError as e:
+            logger.error(f"YouTube download error: {str(e)}")
+            raise RuntimeError(self._friendly_error(str(e))) from e
 
-            # Format string for quality selection
-            # Shorts might have limited formats, so use fallback options
-            if quality == 'best':
-                quality_value = 'bestvideo+bestaudio/best' if not is_short else 'best'
-            else:
-                quality_value = f'bestvideo[height<={quality}]+bestaudio/best'
+        finally:
+            self._cleanup_opts(opts)
 
-            # Use user's cookies if provided
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path, user_cookies=user_cookies)
-            ydl_opts['format'] = quality_value
+    def _friendly_error(self, message: str) -> str:
+        lower = message.lower()
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
-                except Exception as e:
-                    # Fallback for Shorts with limited format options
-                    if is_short:
-                        logger.warning(f"Retrying Shorts download with best format: {str(e)}")
-                        ydl_opts['format'] = 'best'
-                        with yt_dlp.YoutubeDL(ydl_opts) as ydl_retry:
-                            info = ydl_retry.extract_info(url, download=True)
-                            filename = ydl_retry.prepare_filename(info)
-                    else:
-                        raise
+        if "video is not available" in lower:
+            return (
+                "YouTube reports that this video is not available to the current "
+                "client. It may be private, deleted, region-restricted, "
+                "age-restricted, or require authentication."
+            )
 
-                logger.info(f"✅ YouTube download: {info.get('title', '')}")
+        if "sign in" in lower or "login required" in lower or "confirm you're not a bot" in lower:
+            return (
+                "YouTube requires authentication for this video. "
+                "Provide valid authorized YouTube cookies."
+            )
 
-                return {
-                    'success': True,
-                    'filename': filename,
-                    'title': info.get('title', ''),
-                    'format': info.get('ext', 'mp4')
-                }
-        except Exception as e:
-            logger.error(f"❌ YouTube download error: {str(e)}")
-            raise
+        if "requested format is not available" in lower:
+            return (
+                "The requested video quality is not available. Try quality='best'."
+            )
+
+        if "javascript runtime" in lower:
+            return (
+                "YouTube extraction requires a supported JavaScript runtime. "
+                "Node.js is configured for yt-dlp."
+            )
+
+        if "ffmpeg" in lower:
+            return (
+                "FFmpeg is required to merge separate video and audio streams."
+            )
+
+        return message
+
+    def close(self):
+        pass

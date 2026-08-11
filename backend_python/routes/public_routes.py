@@ -1,9 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import uuid
 import aiohttp
+import os
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
 from ..services.cleanup_service import CleanupService
@@ -195,3 +196,26 @@ async def end_session(session_id: str = Query(...)):
     except Exception as e:
         logger.error(f"Session end error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/download/{download_id}/auto-download")
+async def auto_download_file(download_id: str, session_id: str = Query(...)):
+    try:
+        download = await download_service.get_download_status(download_id, session_id)
+
+        if download["status"] != "completed":
+            raise ValueError(f"Download not completed: {download['status']}")
+
+        file_path = download.get("filename")
+        if not file_path or not os.path.exists(file_path):
+            raise ValueError("File not found on server")
+
+        filename = os.path.basename(file_path)
+        return FileResponse(
+            path=file_path,
+            filename=filename,
+            media_type='application/octet-stream',
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+    except Exception as e:
+        logger.error(f"Auto download error: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
