@@ -1,12 +1,37 @@
 from urllib.parse import urlparse
 from .youtube_provider import YouTubeProvider
-from .instagram_provider import InstagramProvider
-from .facebook_provider import FacebookProvider
-from .tiktok_provider import TikTokProvider
-from .twitter_provider import TwitterProvider
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Lazy load other providers to avoid missing dependencies during development
+def _get_instagram_provider():
+    try:
+        from .instagram_provider import InstagramProvider
+        return InstagramProvider
+    except ImportError:
+        raise ValueError("Instagram provider not available")
+
+def _get_facebook_provider():
+    try:
+        from .facebook_provider import FacebookProvider
+        return FacebookProvider
+    except ImportError:
+        raise ValueError("Facebook provider not available")
+
+def _get_tiktok_provider():
+    try:
+        from .tiktok_provider import TikTokProvider
+        return TikTokProvider
+    except ImportError:
+        raise ValueError("TikTok provider not available")
+
+def _get_twitter_provider():
+    try:
+        from .twitter_provider import TwitterProvider
+        return TwitterProvider
+    except ImportError:
+        raise ValueError("Twitter provider not available")
 
 class ProviderFactory:
     @staticmethod
@@ -17,13 +42,13 @@ class ProviderFactory:
         if "youtube.com" in domain or "youtu.be" in domain:
             return YouTubeProvider()
         elif "instagram.com" in domain:
-            return InstagramProvider()
+            return _get_instagram_provider()()
         elif "facebook.com" in domain or "fb.com" in domain:
-            return FacebookProvider()
+            return _get_facebook_provider()()
         elif "tiktok.com" in domain:
-            return TikTokProvider()
+            return _get_tiktok_provider()()
         elif "twitter.com" in domain or "x.com" in domain:
-            return TwitterProvider()
+            return _get_twitter_provider()()
         else:
             raise ValueError(f"Unsupported platform: {domain}")
 
