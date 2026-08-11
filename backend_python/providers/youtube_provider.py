@@ -23,22 +23,25 @@ class YouTubeProvider:
         opts = {
             'quiet': False,
             'no_warnings': False,
-            'socket_timeout': 30,
-            'retries': 15,
-            'fragment_retries': 15,
+            'socket_timeout': 60,
+            'retries': 3,
+            'fragment_retries': 3,
             'skip_unavailable_fragments': True,
             'keep_fragments': False,
             'http_headers': {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept-Language': 'en-US,en;q=0.9',
             },
-            # Always add fallback player clients for better compatibility
             'extractor_args': {
                 'youtube': {
                     'player_client': ['web', 'android_vr', 'android'],
                     'skip': ['hls', 'dash'],
                 }
-            }
+            },
+            'file_access_retries': 2,
+            'extractor_retries': 2,
+            'connection_speed': 20,
+            'throttledratelimit': 1000000,
         }
 
         # Use user's browser cookies if provided (from their YouTube login)

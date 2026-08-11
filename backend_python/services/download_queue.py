@@ -55,7 +55,7 @@ class DownloadQueue:
             async def process():
                 await self.db.update_download(
                     download_id,
-                    {"status": "downloading", "started_at": datetime.utcnow()}
+                    {"status": "downloading", "progress": 10, "started_at": datetime.utcnow()}
                 )
 
                 save_path = config.save_path
@@ -63,6 +63,9 @@ class DownloadQueue:
 
                 provider = get_provider(download_info["url"])
                 user_cookies = download_info.get("user_cookies")
+
+                await self.db.update_download(download_id, {"progress": 30})
+
                 result = await provider.download(
                     download_info["url"],
                     download_info["quality"],
@@ -70,9 +73,11 @@ class DownloadQueue:
                     user_cookies=user_cookies if 'youtube' in download_info["url"].lower() else None
                 )
 
-                # Upload to Cloudinary
+                await self.db.update_download(download_id, {"progress": 75})
+
                 cloudinary_url = None
                 if os.path.exists(result["filename"]):
+                    await self.db.update_download(download_id, {"progress": 90})
                     cloudinary_url = await self.cloudinary.upload_video(
                         result["filename"],
                         f"{download_id}.mp4"
@@ -82,6 +87,7 @@ class DownloadQueue:
                     download_id,
                     {
                         "status": "completed",
+                        "progress": 100,
                         "filename": result["filename"],
                         "file_url": cloudinary_url or "",
                         "completed_at": datetime.utcnow()

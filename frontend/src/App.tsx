@@ -111,6 +111,7 @@ function App() {
   const [downloadState, setDownloadState] = useState<string | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
+  const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
 
   const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
     return fetch(url, options);
@@ -171,7 +172,7 @@ function App() {
     if (!sessionId) return;
     const interval = setInterval(() => {
       fetchDownloads();
-    }, 2000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [sessionId, fetchDownloads]);
 
@@ -199,6 +200,13 @@ function App() {
       push('❌ Please enter a URL', 'error');
       return;
     }
+    if (metadataCacheRef.current[url]) {
+      setMetadata(metadataCacheRef.current[url]);
+      setSelectedQuality(metadataCacheRef.current[url].qualities[0]?.value?.toString() || 'best');
+      setPhase('result');
+      push('✅ Loaded from cache');
+      return;
+    }
     setPhase('loading');
     try {
       const res = await apiCall(`${apiUrl}/api/metadata`, {
@@ -213,6 +221,7 @@ function App() {
 
       const data = await res.json();
       if (data.success) {
+        metadataCacheRef.current[url] = data.metadata;
         setMetadata(data.metadata);
         setSelectedQuality(data.metadata.qualities[0]?.value?.toString() || 'best');
         setPhase('result');
@@ -356,7 +365,6 @@ function App() {
         </header>
 
         <section className="hero-section">
-          <HeroOrb />
           <h1>
             <span className="gradient-text">SPVB</span> Downloader
           </h1>
@@ -366,7 +374,6 @@ function App() {
 
         {sessionId && (
           <section className="main-content">
-            <SessionCard session={{ id: sessionId, status: 'active' }} onNew={newSession} onEnd={endSession} />
 
             <div className="tabs-container">
               <button
@@ -420,21 +427,6 @@ function App() {
   );
 }
 
-function HeroOrb() {
-  return (
-    <div className="hero-orb">
-      <div className="orb-ring-outer"></div>
-      <div className="orb-ring-inner"></div>
-      <div className="orb-glow"></div>
-      <div className="orb-body">
-        <div className="orb-content">
-          <span className="orb-icon">↓</span>
-          <span className="orb-text">SPVB</span>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function PlatformBadges() {
   return (
@@ -450,34 +442,6 @@ function PlatformBadges() {
   );
 }
 
-function SessionCard({ session, onNew, onEnd }: any) {
-  const [copied, setCopied] = useState(false);
-  const copyId = () => {
-    navigator.clipboard.writeText(session.id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className="session-card">
-      <div className="session-info">
-        <div className="status-badge active">
-          <span className="pulse-dot"></span>
-        </div>
-        <div>
-          <div className="status-text">Session Active</div>
-          <button onClick={copyId} className="session-id">
-            {session.id.slice(0, 13)}… {copied ? '✓ copied' : '📋'}
-          </button>
-        </div>
-      </div>
-      <div className="session-actions">
-        <button onClick={onNew} className="btn-small">↻ New Session</button>
-        <button onClick={onEnd} className="btn-small danger">✕ End Session</button>
-      </div>
-    </div>
-  );
-}
 
 function DownloaderCard({ url, setUrl, validation, msg, loading, onGetInfo, onPaste }: any) {
   return (
@@ -556,15 +520,19 @@ function ResultCard({ data, selectedQuality, setSelectedQuality, onDownload, dow
           </div>
         </div>
 
-        <button onClick={onDownload} disabled={downloadState === 'preparing'} className="btn-download">
+        <button onClick={onDownload} disabled={downloadState?.startsWith('downloading') || downloadState === 'preparing'} className="btn-download">
           {downloadState === 'preparing' ? (
             <>
-              <span className="spinner"></span>Preparing…
+              <span className="spinner"></span>⏳ Preparing…
+            </>
+          ) : downloadState?.startsWith('downloading') ? (
+            <>
+              <span className="spinner"></span>⬇️ {downloadState.split('_')[1] || '0'}%
             </>
           ) : downloadState === 'complete' ? (
-            <>✓ Download Complete</>
+            <>✅ Complete</>
           ) : (
-            <>↓ Download {selectedQuality}p</>
+            <>⬇️ Download {selectedQuality}p</>
           )}
         </button>
 
