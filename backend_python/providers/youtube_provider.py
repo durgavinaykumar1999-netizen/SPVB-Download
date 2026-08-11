@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -17,54 +18,48 @@ logger = setup_logger()
 
 
 class YouTubeProvider:
+    """Production-grade YouTube video provider with Shorts support."""
 
     def __init__(self):
         self.platform = "youtube"
-
-        self.ffmpeg_path = (
-            shutil.which("ffmpeg")
-            or "/usr/bin/ffmpeg"
-        )
-
-        # Detect Node.js
         self.node_path = self._find_node()
+        self.ffmpeg_path = self._find_ffmpeg()
+        self._log_diagnostics()
 
-        logger.info(
-            "yt-dlp version: %s",
-            yt_dlp.version.__version__
-        )
+    def _find_node(self) -> str | None:
+        """Find Node.js executable with this priority:
+        1. YTDLP_NODE_PATH environment variable
+        2. /opt/nodejs/bin/node
+        3. /usr/bin/node
+        4. /usr/bin/nodejs
+        5. shutil.which("node")
+        6. shutil.which("nodejs")
+        """
+        # Environment variable override
+        env_path = os.getenv("YTDLP_NODE_PATH")
+        if env_path and os.path.isfile(env_path) and os.access(env_path, os.X_OK):
+            return env_path
 
-        logger.info(
-            "Node.js: %s",
-            self.node_path or "NOT FOUND"
-        )
-
-        logger.info(
-            "FFmpeg: %s",
-            self.ffmpeg_path or "NOT FOUND"
-        )
-
-        if self.node_path:
-            node_version = self._get_node_version()
-            logger.info(
-                "Node.js version: %s",
-                node_version or "unknown"
-            )
-
-    def _find_node(self):
         candidates = [
+            "/opt/nodejs/bin/node",
             "/usr/bin/node",
             "/usr/bin/nodejs",
-            "/opt/nodejs/bin/node",
         ]
 
         for path in candidates:
             if os.path.isfile(path) and os.access(path, os.X_OK):
                 return path
 
-        return shutil.which("node") or shutil.which("nodejs")
+        # Fallback to which
+        for name in ["node", "nodejs"]:
+            path = shutil.which(name)
+            if path:
+                return path
 
-    def _get_node_version(self):
+        return None
+
+    def _get_node_version(self) -> str | None:
+        """Get Node.js version string."""
         if not self.node_path:
             return None
 
@@ -75,16 +70,61 @@ class YouTubeProvider:
                 text=True,
                 timeout=5,
             )
-
             if result.returncode == 0:
                 return result.stdout.strip()
-
         except Exception:
             pass
 
         return None
 
+    def _find_ffmpeg(self) -> str | None:
+        """Find FFmpeg executable with this priority:
+        1. YTDLP_FFMPEG_PATH environment variable
+        2. /usr/bin/ffmpeg
+        3. /usr/local/bin/ffmpeg
+        4. shutil.which("ffmpeg")
+        """
+        env_path = os.getenv("YTDLP_FFMPEG_PATH")
+        if env_path and os.path.isfile(env_path) and os.access(env_path, os.X_OK):
+            return env_path
+
+        candidates = [
+            "/usr/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+        ]
+
+        for path in candidates:
+            if os.path.isfile(path) and os.access(path, os.X_OK):
+                return path
+
+        return shutil.which("ffmpeg")
+
+    def _log_diagnostics(self):
+        """Log diagnostic information on startup."""
+        logger.info("YouTube Provider Initialization")
+        logger.info(f"  yt-dlp version: {yt_dlp.version.__version__}")
+        logger.info(f"  Python: {sys.executable}")
+        logger.info(f"  Node.js: {self.node_path or 'NOT FOUND'}")
+
+        if self.node_path:
+            node_version = self._get_node_version()
+            logger.info(f"  Node version: {node_version or 'unknown'}")
+
+        logger.info(f"  FFmpeg: {self.ffmpeg_path or 'NOT FOUND'}")
+
+    def diagnostics(self) -> dict:
+        """Return runtime diagnostics without contacting YouTube."""
+        return {
+            "yt_dlp_version": yt_dlp.version.__version__,
+            "python": sys.executable,
+            "node_path": self.node_path,
+            "node_version": self._get_node_version(),
+            "ffmpeg_path": self.ffmpeg_path,
+            "ffmpeg_available": self.ffmpeg_path is not None,
+        }
+
     def detect_url_type(self, url: str) -> str:
+        """Detect YouTube URL type: video, short, embed, live, or unknown."""
         parsed = urlparse(url)
         host = parsed.netloc.lower()
         path = parsed.path.lower()
@@ -105,6 +145,9 @@ class YouTubeProvider:
         return "unknown"
 
     def normalize_url(self, url: str) -> str:
+        """Normalize all supported YouTube URL formats to watch?v=ID.
+        Preserves v parameter, removes tracking parameters (si, feature, fbclid, utm_*).
+        """
         if not url:
             raise ValueError("YouTube URL cannot be empty")
 
@@ -113,30 +156,37 @@ class YouTubeProvider:
         host = parsed.netloc.lower()
         path = parsed.path
 
+        # youtu.be/VIDEO_ID → standard watch URL
         if "youtu.be" in host:
             video_id = path.strip("/").split("/")[0]
             if video_id:
                 return f"https://www.youtube.com/watch?v={video_id}"
 
+        # /shorts/VIDEO_ID → standard watch URL
         match = re.search(r"/shorts/([A-Za-z0-9_-]+)", path)
         if match:
             return f"https://www.youtube.com/watch?v={match.group(1)}"
 
+        # /embed/VIDEO_ID → standard watch URL
         match = re.search(r"/embed/([A-Za-z0-9_-]+)", path)
         if match:
             return f"https://www.youtube.com/watch?v={match.group(1)}"
 
+        # /live/VIDEO_ID → standard watch URL
         match = re.search(r"/live/([A-Za-z0-9_-]+)", path)
         if match:
             return f"https://www.youtube.com/watch?v={match.group(1)}"
 
+        # Already watch?v=... → keep the v parameter, remove tracking
         query = parse_qs(parsed.query)
         if "v" in query:
-            return f"https://www.youtube.com/watch?v={query['v'][0]}"
+            video_id = query["v"][0]
+            return f"https://www.youtube.com/watch?v={video_id}"
 
         return url
 
     def is_youtube_url(self, url: str) -> bool:
+        """Validate that URL is a YouTube URL."""
         try:
             parsed = urlparse(url)
             host = parsed.netloc.lower()
@@ -151,14 +201,15 @@ class YouTubeProvider:
             ]
 
             return any(
-                host == h or host.endswith("." + h)
-                for h in allowed_hosts
+                host == h or host.endswith("." + h) for h in allowed_hosts
             )
-
         except Exception:
             return False
 
-    def _create_cookie_file(self, user_cookies: str):
+    def _create_cookie_file(self, user_cookies: str) -> str | None:
+        """Create temporary Netscape cookie file for yt-dlp.
+        Must be cleaned up in finally block.
+        """
         if not user_cookies:
             return None
 
@@ -167,7 +218,7 @@ class YouTubeProvider:
             return None
 
         if "Netscape HTTP Cookie File" not in user_cookies:
-            logger.warning("Cookie data is not in Netscape format. Ignoring cookies.")
+            logger.warning("Cookie data not in Netscape format. Ignoring.")
             return None
 
         try:
@@ -177,11 +228,10 @@ class YouTubeProvider:
                 delete=False,
                 encoding="utf-8",
             )
-
             temp_file.write(user_cookies)
             temp_file.close()
 
-            logger.info("Temporary YouTube cookie file created")
+            logger.info("Temporary cookie file created for yt-dlp")
             return temp_file.name
 
         except Exception as e:
@@ -191,19 +241,23 @@ class YouTubeProvider:
     def _get_ydl_opts(
         self,
         download: bool = False,
-        save_path: str = None,
-        user_cookies: str = None,
+        save_path: str | None = None,
+        user_cookies: str | None = None,
         quality: str = "best",
-    ):
+    ) -> dict:
+        """Build yt-dlp options dictionary.
+
+        Always sets js_runtimes as a dictionary to avoid format errors.
+        Includes proper retry logic and timeout configuration.
+        """
         opts = {
             "quiet": False,
             "no_warnings": False,
             "noplaylist": True,
-            "js_runtimes": {"node": {}},
             "ffmpeg_location": self.ffmpeg_path,
             "socket_timeout": 60,
-            "retries": 3,
-            "fragment_retries": 3,
+            "retries": 5,
+            "fragment_retries": 5,
             "file_access_retries": 5,
             "extractor_retries": 3,
             "http_headers": {
@@ -216,17 +270,26 @@ class YouTubeProvider:
                     "Safari/537.36"
                 ),
                 "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             },
-            "age_limit": None,
         }
 
+        # JavaScript runtime configuration - must be dictionary format
+        if self.node_path:
+            opts["js_runtimes"] = {"node": {}}
+        else:
+            logger.warning("Node.js not found - YouTube extraction may fail for some content")
+
+        # Cookies (if provided)
         cookie_file = self._create_cookie_file(user_cookies)
         if cookie_file:
             opts["cookiefile"] = cookie_file
             opts["_temporary_cookie_file"] = cookie_file
 
+        # Download-specific options
         if download:
+            if not save_path:
+                raise ValueError("save_path required for download")
+
             os.makedirs(save_path, exist_ok=True)
             opts.update({
                 "format": self._get_format(quality),
@@ -239,7 +302,11 @@ class YouTubeProvider:
 
         return opts
 
-    def _get_format(self, quality: str):
+    def _get_format(self, quality: str) -> str:
+        """Get yt-dlp format string for requested quality.
+
+        Always includes /b fallback for compatibility.
+        """
         if not quality or quality == "best":
             return "bv*+ba/b"
 
@@ -249,33 +316,76 @@ class YouTubeProvider:
         except (ValueError, TypeError):
             return "bv*+ba/b"
 
-    def _cleanup_opts(self, opts):
+    def _cleanup_opts(self, opts: dict):
+        """Remove temporary cookie file created by _create_cookie_file."""
         cookie_file = opts.get("_temporary_cookie_file")
         if cookie_file:
             try:
                 if os.path.exists(cookie_file):
                     os.unlink(cookie_file)
+                    logger.info("Temporary cookie file cleaned up")
             except Exception as e:
                 logger.warning(f"Could not remove temporary cookie file: {e}")
 
-    async def get_metadata(self, url: str, user_cookies: str = None):
+    def _find_downloaded_file(
+        self, save_path: str, expected_name: str, info: dict
+    ) -> str | None:
+        """Find actual downloaded file in save_path.
+
+        1. Check prepared filename
+        2. Check .mp4 variant
+        3. Look for newest file by mtime
+        4. Verify file size > 0
+        """
+        candidates = [
+            expected_name,
+            os.path.splitext(expected_name)[0] + ".mp4",
+            os.path.splitext(expected_name)[0] + ".mkv",
+            os.path.splitext(expected_name)[0] + ".webm",
+        ]
+
+        for candidate in candidates:
+            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
+                return candidate
+
+        # Fallback: newest file by mtime
+        try:
+            files = sorted(
+                Path(save_path).glob("*"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if files and files[0].is_file() and files[0].stat().st_size > 0:
+                return str(files[0])
+        except Exception:
+            pass
+
+        return None
+
+    async def get_metadata(
+        self, url: str, user_cookies: str | None = None
+    ) -> dict:
+        """Async wrapper for synchronous metadata extraction."""
         return await asyncio.to_thread(
-            self._get_metadata_sync,
-            url,
-            user_cookies
+            self._get_metadata_sync, url, user_cookies
         )
 
-    def _get_metadata_sync(self, url: str, user_cookies: str = None):
+    def _get_metadata_sync(
+        self, url: str, user_cookies: str | None = None
+    ) -> dict:
+        """Extract metadata from YouTube video without downloading.
+
+        Handles both long videos and Shorts with same code path.
+        """
         original_url = url
         url_type = self.detect_url_type(url)
         normalized_url = self.normalize_url(url)
 
-        logger.info(f"Original URL: {original_url}")
-        logger.info(f"Normalized URL: {normalized_url}")
-        logger.info(f"Input type: {url_type}")
+        logger.info(f"Metadata request for: {original_url[:60]}...")
+        logger.info(f"  URL type: {url_type}")
 
         if not self.is_youtube_url(original_url):
-            raise ValueError("URL is not a valid YouTube URL")
+            raise ValueError("Not a valid YouTube URL")
 
         opts = self._get_ydl_opts(download=False, user_cookies=user_cookies)
 
@@ -283,6 +393,7 @@ class YouTubeProvider:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(normalized_url, download=False)
 
+            # Extract and deduplicate video qualities
             formats = info.get("formats", [])
             qualities = {}
 
@@ -337,12 +448,13 @@ class YouTubeProvider:
                 "format_count": len(formats),
             }
 
-            logger.info(f"YouTube metadata extracted: {result['title']}")
+            logger.info(f"Metadata extracted: {result['title'][:50]}...")
             return result
 
         except yt_dlp.utils.DownloadError as e:
-            logger.error(f"YouTube metadata error: {str(e)}")
-            raise RuntimeError(self._friendly_error(str(e))) from e
+            error_msg = self._friendly_error(str(e))
+            logger.error(f"YouTube metadata error: {error_msg}")
+            raise RuntimeError(error_msg) from e
 
         finally:
             self._cleanup_opts(opts)
@@ -352,14 +464,11 @@ class YouTubeProvider:
         url: str,
         quality: str,
         save_path: str,
-        user_cookies: str = None
-    ):
+        user_cookies: str | None = None,
+    ) -> dict:
+        """Async wrapper for synchronous download."""
         return await asyncio.to_thread(
-            self._download_sync,
-            url,
-            quality,
-            save_path,
-            user_cookies
+            self._download_sync, url, quality, save_path, user_cookies
         )
 
     def _download_sync(
@@ -367,19 +476,22 @@ class YouTubeProvider:
         url: str,
         quality: str,
         save_path: str,
-        user_cookies: str = None
-    ):
+        user_cookies: str | None = None,
+    ) -> dict:
+        """Download YouTube video (long or Short) to MP4 file.
+
+        Uses same code path for both video types.
+        """
         original_url = url
         url_type = self.detect_url_type(url)
         normalized_url = self.normalize_url(url)
 
-        logger.info("Starting YouTube download")
-        logger.info(f"Original URL: {original_url}")
-        logger.info(f"Normalized URL: {normalized_url}")
-        logger.info(f"Detected URL type: {url_type}")
+        logger.info(f"Starting download: {original_url[:60]}...")
+        logger.info(f"  URL type: {url_type}")
+        logger.info(f"  Quality: {quality}")
 
         format_string = self._get_format(quality)
-        logger.info(f"Format: {format_string}")
+        logger.info(f"  Format: {format_string}")
 
         os.makedirs(save_path, exist_ok=True)
 
@@ -387,7 +499,7 @@ class YouTubeProvider:
             download=True,
             save_path=save_path,
             user_cookies=user_cookies,
-            quality=quality
+            quality=quality,
         )
 
         try:
@@ -395,39 +507,18 @@ class YouTubeProvider:
                 info = ydl.extract_info(normalized_url, download=True)
                 filename = ydl.prepare_filename(info)
 
-            base_name = os.path.splitext(filename)[0]
-            possible_files = [
-                filename,
-                base_name + ".mp4",
-                base_name + ".mkv",
-                base_name + ".webm",
-            ]
-
-            final_file = None
-            for candidate in possible_files:
-                if os.path.exists(candidate):
-                    final_file = candidate
-                    break
-
-            if not final_file:
-                files = sorted(
-                    Path(save_path).glob("*"),
-                    key=lambda p: p.stat().st_mtime,
-                    reverse=True,
-                )
-                if files:
-                    final_file = str(files[0])
+            # Find actual output file
+            final_file = self._find_downloaded_file(save_path, filename, info)
 
             if not final_file:
                 raise RuntimeError(
-                    "yt-dlp completed but output file could not be found."
+                    "Download completed but output file could not be found"
                 )
 
             file_size = os.path.getsize(final_file)
 
-            logger.info("YouTube download completed")
-            logger.info(f"File: {final_file}")
-            logger.info(f"Size: {file_size / (1024 * 1024):.2f} MB")
+            logger.info(f"Download complete: {os.path.basename(final_file)}")
+            logger.info(f"  File size: {file_size / (1024*1024):.2f} MB")
 
             return {
                 "success": True,
@@ -440,66 +531,78 @@ class YouTubeProvider:
                 "filename": final_file,
                 "filepath": final_file,
                 "file_size": file_size,
-                "format": info.get("ext", "mp4"),
+                "format": "mp4",
                 "duration": info.get("duration", 0),
                 "thumbnail": info.get("thumbnail", ""),
                 "uploader": info.get("uploader", ""),
             }
 
         except yt_dlp.utils.DownloadError as e:
-            logger.error(f"YouTube download error: {str(e)}")
-            raise RuntimeError(self._friendly_error(str(e))) from e
+            error_msg = self._friendly_error(str(e))
+            logger.error(f"YouTube download error: {error_msg}")
+            raise RuntimeError(error_msg) from e
 
         finally:
             self._cleanup_opts(opts)
 
     def _friendly_error(self, message: str) -> str:
+        """Convert yt-dlp errors to user-friendly messages.
+
+        Distinguishes between auth errors, format errors, and unavailable content.
+        """
         lower = message.lower()
 
-        if "video is not available" in lower:
+        if "this video is not available" in lower:
             return (
-                "YouTube reports that this video is not available to the current "
-                "client. It may be private, deleted, region-restricted, "
-                "age-restricted, or require authentication."
+                "This video is not available. It may be deleted, private, "
+                "region-restricted, age-restricted without authentication, "
+                "or unavailable to the current client."
             )
 
         if "sign in" in lower or "confirm you're not a bot" in lower:
             return (
                 "YouTube requires authentication for this video. "
-                "This is usually needed for age-restricted or limited content. "
-                "Please provide YouTube cookies for authenticated access, or try again in a few moments."
+                "This is typically needed for age-restricted or limited content. "
+                "Please provide YouTube cookies for authenticated access."
             )
 
         if "login required" in lower or "403" in lower or "forbidden" in lower:
             return (
-                "Access denied. This video may require authentication or may not be available in your region. "
+                "Access denied. This video may require authentication, "
+                "be region-restricted, or have other access limitations. "
                 "Try providing YouTube cookies for authenticated access."
             )
 
         if "requested format is not available" in lower:
-            return (
-                "The requested video quality is not available. Try quality='best'."
-            )
+            return "The requested video quality is not available. Try quality='best'."
 
-        if "javascript runtime" in lower:
+        if "no supported javascript runtime" in lower:
             return (
-                "YouTube extraction requires a supported JavaScript runtime. "
-                "Node.js is configured for yt-dlp."
+                "YouTube extraction requires a JavaScript runtime (Node.js). "
+                "Ensure Node.js is installed and YTDLP_NODE_PATH is configured correctly."
             )
 
         if "ffmpeg" in lower:
             return (
-                "FFmpeg is required to merge separate video and audio streams."
+                "FFmpeg is required to merge video and audio streams. "
+                "Ensure FFmpeg is installed and YTDLP_FFMPEG_PATH is configured correctly."
+            )
+
+        if "429" in lower or "too many requests" in lower:
+            return (
+                "Too many requests from this server. YouTube is rate-limiting. "
+                "Please wait before retrying. This is temporary."
             )
 
         if "bot" in lower or "captcha" in lower:
             return (
                 "YouTube detected suspicious activity. This may indicate: "
-                "(1) Too many requests from this server, (2) Age-restricted content requiring authentication, "
-                "(3) Region-restricted content. Please provide YouTube cookies or wait before retrying."
+                "(1) Too many rapid requests, (2) Age-restricted content requiring authentication, "
+                "(3) Region-restricted content. Try providing YouTube cookies or wait before retrying."
             )
 
         return message
 
     def close(self):
+        """Clean up resources (no-op for this provider)."""
         pass
