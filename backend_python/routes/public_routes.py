@@ -200,22 +200,38 @@ async def end_session(session_id: str = Query(...)):
 @router.get("/download/{download_id}/auto-download")
 async def auto_download_file(download_id: str, session_id: str = Query(...)):
     try:
+        logger.info(f"Auto-download request: {download_id}")
+
         download = await download_service.get_download_status(download_id, session_id)
+        logger.info(f"Download record retrieved: status={download.get('status')}")
 
         if download["status"] != "completed":
-            raise ValueError(f"Download not completed: {download['status']}")
+            error_msg = f"Download not completed: {download['status']}"
+            logger.warning(error_msg)
+            raise ValueError(error_msg)
 
         file_path = download.get("filename")
-        if not file_path or not os.path.exists(file_path):
-            raise ValueError("File not found on server")
+        logger.info(f"File path from DB: {file_path}")
 
+        if not file_path:
+            raise ValueError("No filename stored in database")
+
+        if not os.path.exists(file_path):
+            logger.error(f"File does not exist at path: {file_path}")
+            logger.info(f"Available files would need to be checked in save directory")
+            raise ValueError(f"File not found at: {file_path}")
+
+        file_size = os.path.getsize(file_path)
         filename = os.path.basename(file_path)
+
+        logger.info(f"Serving file: {filename} ({file_size / (1024*1024):.2f} MB)")
+
         return FileResponse(
             path=file_path,
             filename=filename,
-            media_type='application/octet-stream',
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            media_type='video/mp4',
+            headers={"Content-Disposition": f"attachment; filename=\"{filename}\""}
         )
     except Exception as e:
-        logger.error(f"Auto download error: {str(e)}")
+        logger.error(f"Auto download error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=404, detail=str(e))

@@ -209,14 +209,16 @@ class YouTubeProvider:
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 "
-                    "(X11; Linux x86_64) "
+                    "(Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 "
                     "(KHTML, like Gecko) "
                     "Chrome/131.0.0.0 "
                     "Safari/537.36"
                 ),
                 "Accept-Language": "en-US,en;q=0.9",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             },
+            "age_limit": None,
         }
 
         cookie_file = self._create_cookie_file(user_cookies)
@@ -461,10 +463,17 @@ class YouTubeProvider:
                 "age-restricted, or require authentication."
             )
 
-        if "sign in" in lower or "login required" in lower or "confirm you're not a bot" in lower:
+        if "sign in" in lower or "confirm you're not a bot" in lower:
             return (
                 "YouTube requires authentication for this video. "
-                "Provide valid authorized YouTube cookies."
+                "This is usually needed for age-restricted or limited content. "
+                "Please provide YouTube cookies for authenticated access, or try again in a few moments."
+            )
+
+        if "login required" in lower or "403" in lower or "forbidden" in lower:
+            return (
+                "Access denied. This video may require authentication or may not be available in your region. "
+                "Try providing YouTube cookies for authenticated access."
             )
 
         if "requested format is not available" in lower:
@@ -481,6 +490,13 @@ class YouTubeProvider:
         if "ffmpeg" in lower:
             return (
                 "FFmpeg is required to merge separate video and audio streams."
+            )
+
+        if "bot" in lower or "captcha" in lower:
+            return (
+                "YouTube detected suspicious activity. This may indicate: "
+                "(1) Too many requests from this server, (2) Age-restricted content requiring authentication, "
+                "(3) Region-restricted content. Please provide YouTube cookies or wait before retrying."
             )
 
         return message
