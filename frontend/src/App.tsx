@@ -39,36 +39,14 @@ interface HistoryItem {
 }
 
 const PLATFORMS = [
-  { id: 'youtube', name: 'YouTube', color: '#FF0000', icon: '▶' },
   { id: 'instagram', name: 'Instagram', color: '#E1306C', icon: '◎' },
   { id: 'facebook', name: 'Facebook', color: '#1877F2', icon: 'f' },
   { id: 'tiktok', name: 'TikTok', color: '#000000', icon: '♪' },
   { id: 'twitter', name: 'X', color: '#FFFFFF', icon: '𝕏' },
 ];
 
-const extractYouTubeCookies = (): string | null => {
-  try {
-    const cookies = document.cookie.split('; ');
-    if (cookies.length === 0) return null;
-    const authCookieNames = ['SIDCC', 'SSID', 'APISID', 'SAPISID', 'LOGIN_INFO', '__Secure-1PSID'];
-    let netscapeFormat = '# Netscape HTTP Cookie File\n';
-    let hasAuthCookie = false;
-    cookies.forEach((cookie) => {
-      const [name, value] = cookie.split('=', 2);
-      if (name && value && authCookieNames.some(authName => name.includes(authName))) {
-        hasAuthCookie = true;
-        netscapeFormat += `.youtube.com\tTRUE\t/\tTRUE\t9999999999\t${name}\t${value}\n`;
-      }
-    });
-    return hasAuthCookie ? netscapeFormat : null;
-  } catch (e) {
-    return null;
-  }
-};
-
 const detectPlatform = (url: string): string | null => {
   const u = url.toLowerCase();
-  if (u.includes('youtube.com') || u.includes('youtu.be')) return 'YouTube';
   if (u.includes('instagram.com')) return 'Instagram';
   if (u.includes('facebook.com') || u.includes('fb.watch')) return 'Facebook';
   if (u.includes('tiktok.com')) return 'TikTok';
@@ -161,11 +139,6 @@ function App() {
       setSessionId(savedSessionId);
     } else {
       createSession();
-    }
-
-    const cookies = extractYouTubeCookies();
-    if (cookies) {
-      setUserCookies(cookies);
     }
   }, [createSession]);
 

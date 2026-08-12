@@ -21,7 +21,7 @@ logger = setup_logger()
 # Create FastAPI app
 app = FastAPI(
     title="Social Media Downloader",
-    description="Download videos from YouTube, Instagram, Facebook, Twitter, TikTok",
+    description="Download videos from Instagram, Facebook, Twitter, TikTok",
     version="1.0.0"
 )
 

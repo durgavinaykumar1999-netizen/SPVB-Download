@@ -13,7 +13,6 @@ dnspython==2.6.1
 cloudinary==1.36.0
 
 # Video Downloading
-yt-dlp>=2024.8.0
 instaloader>=4.13
 
 # Utilities

@@ -1,5 +1,4 @@
 from urllib.parse import urlparse
-from .youtube_provider import YouTubeProvider
 from ..utils.logger import setup_logger
 
 logger = setup_logger()
@@ -39,9 +38,7 @@ class ProviderFactory:
         parsed_url = urlparse(url.lower())
         domain = parsed_url.netloc.replace("www.", "")
 
-        if "youtube.com" in domain or "youtu.be" in domain:
-            return YouTubeProvider()
-        elif "instagram.com" in domain:
+        if "instagram.com" in domain:
             return _get_instagram_provider()()
         elif "facebook.com" in domain or "fb.com" in domain:
             return _get_facebook_provider()()

@@ -9,16 +9,7 @@ class URLParser:
         parsed_url = urlparse(url.lower())
         domain = parsed_url.netloc.replace("www.", "")
 
-        if "youtube.com" in domain:
-            # Handle YouTube Shorts URLs (/shorts/VIDEO_ID)
-            if "/shorts/" in parsed_url.path:
-                return parsed_url.path.split("/shorts/")[1].split("?")[0]
-            # Handle standard YouTube URLs (v=VIDEO_ID)
-            query = parse_qs(parsed_url.query)
-            return query.get("v", [None])[0]
-        elif "youtu.be" in domain:
-            return parsed_url.path.lstrip('/')
-        elif "instagram.com" in domain:
+        if "instagram.com" in domain:
             if "/p/" in url:
                 return url.split("/p/")[1].rstrip('/')
             elif "/reel/" in url:
@@ -37,9 +28,7 @@ class URLParser:
         parsed_url = urlparse(url.lower())
         domain = parsed_url.netloc.replace("www.", "")
 
-        if "youtube.com" in domain or "youtu.be" in domain:
-            return "youtube"
-        elif "instagram.com" in domain:
+        if "instagram.com" in domain:
             return "instagram"
         elif "facebook.com" in domain or "fb.com" in domain:
             return "facebook"

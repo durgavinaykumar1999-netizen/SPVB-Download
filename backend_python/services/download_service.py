@@ -13,9 +13,8 @@ class DownloadService:
     async def get_metadata(self, url: str, user_cookies: str = None):
         try:
             provider = get_provider(url)
-            # YouTube provider accepts user_cookies, others ignore it
             if hasattr(provider, 'get_metadata'):
-                metadata = await provider.get_metadata(url, user_cookies=user_cookies) if 'youtube' in url.lower() else await provider.get_metadata(url)
+                metadata = await provider.get_metadata(url)
             return metadata
         except Exception as e:
             logger.error(f"Metadata fetch error: {str(e)}")

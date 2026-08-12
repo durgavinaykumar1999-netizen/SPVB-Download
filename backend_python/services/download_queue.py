@@ -69,8 +69,7 @@ class DownloadQueue:
                 result = await provider.download(
                     download_info["url"],
                     download_info["quality"],
-                    save_path,
-                    user_cookies=user_cookies if 'youtube' in download_info["url"].lower() else None
+                    save_path
                 )
 
                 await self.db.update_download(download_id, {"progress": 75})

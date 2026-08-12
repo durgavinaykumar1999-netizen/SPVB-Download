@@ -4,11 +4,5 @@ services:
     runtime: python
     runtimeVersion: 3.12.0
     buildCommand: |
-      apt-get update && apt-get install -y ffmpeg node-gyp nodejs npm &&
       pip install -r backend_python/requirements.txt
     startCommand: uvicorn backend_python.main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: YTDLP_FFMPEG_PATH
-        value: /usr/bin/ffmpeg
-      - key: YTDLP_NODE_PATH
-        value: /usr/bin/node
