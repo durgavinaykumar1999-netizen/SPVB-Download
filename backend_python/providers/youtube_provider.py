@@ -224,12 +224,12 @@ class YouTubeProvider:
             "no_warnings": False,
             "noplaylist": True,
             "socket_timeout": 60,
-            "retries": 10,
-            "fragment_retries": 10,
+            "retries": 15,
+            "fragment_retries": 15,
             "file_access_retries": 10,
-            "extractor_retries": 5,
-            "sleep_interval": 2,
-            "max_sleep_interval": 5,
+            "extractor_retries": 10,
+            "sleep_interval": 3,
+            "max_sleep_interval": 8,
             "http_headers": {
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -238,14 +238,20 @@ class YouTubeProvider:
                 ),
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Encoding": "gzip, deflate",
+                "Cache-Control": "no-cache",
             },
             "force_ipv4": True,
+            "geo_bypass": True,
+            "playlist_items": "0",
         }
 
-        # JavaScript runtime
+        # JavaScript runtime - try Node.js first
         if self.node_path:
             opts["js_runtimes"] = {"node": {}}
-            logger.debug("Using Node.js for JavaScript extraction")
+            logger.info(f"Using Node.js for JavaScript extraction: {self.node_path}")
+        else:
+            logger.warning("Node.js not found - YouTube extraction may be limited")
 
         # FFmpeg
         if self.ffmpeg_path:
