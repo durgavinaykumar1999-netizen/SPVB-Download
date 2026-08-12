@@ -293,7 +293,7 @@ class YouTubeProvider:
     # METADATA
     # ========================================================
 
-    async def get_metadata(self, url: str):
+    async def get_metadata(self, url: str, user_cookies: str = None):
         """Get video metadata asynchronously."""
         return await asyncio.to_thread(self._get_metadata_sync, url)
 
@@ -387,6 +387,7 @@ class YouTubeProvider:
         url: str,
         quality: str = "best",
         save_path: str = "./downloads",
+        user_cookies: str = None,
     ):
         """Download video asynchronously."""
         return await asyncio.to_thread(self._download_sync, url, quality, save_path)
