@@ -82,7 +82,6 @@ function App() {
   const [metadata, setMetadata] = useState<Metadata | null>(null);
   const [selectedQuality, setSelectedQuality] = useState<string | number>('best');
   const [downloads, setDownloads] = useState<Download[]>([]);
-  const [userCookies, setUserCookies] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'result' | 'error'>('idle');
@@ -189,7 +188,6 @@ function App() {
         body: JSON.stringify({
           url,
           session_id: sessionId,
-          user_cookies: userCookies,
         }),
       });
 
@@ -288,7 +286,6 @@ function App() {
           url,
           session_id: sessionId,
           quality: qualityStr,
-          user_cookies: userCookies,
         }),
       });
 
