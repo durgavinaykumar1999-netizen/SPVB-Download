@@ -240,7 +240,6 @@ class YouTubeProvider:
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             },
             "force_ipv4": True,
-            "impersonate": "Chrome120",
         }
 
         # JavaScript runtime
