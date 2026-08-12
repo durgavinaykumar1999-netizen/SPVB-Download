@@ -218,31 +218,33 @@ class YouTubeProvider:
     # ========================================================
 
     def _get_base_options(self):
-        """Get base yt-dlp options."""
+        """Get base yt-dlp options with datacenter-friendly settings."""
         opts = {
             "quiet": False,
             "no_warnings": False,
             "noplaylist": True,
             "socket_timeout": 60,
-            "retries": 15,
-            "fragment_retries": 15,
-            "file_access_retries": 10,
-            "extractor_retries": 10,
-            "sleep_interval": 3,
-            "max_sleep_interval": 8,
+            "retries": 20,
+            "fragment_retries": 20,
+            "file_access_retries": 15,
+            "extractor_retries": 15,
+            "sleep_interval": 4,
+            "max_sleep_interval": 10,
             "http_headers": {
                 "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "Mozilla/5.0 (Linux; Android 13) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
+                    "Chrome/120.0.0.0 Mobile Safari/537.36"
                 ),
                 "Accept-Language": "en-US,en;q=0.9",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept": "*/*",
                 "Accept-Encoding": "gzip, deflate",
                 "Cache-Control": "no-cache",
+                "X-Requested-With": "XMLHttpRequest",
             },
             "force_ipv4": True,
             "geo_bypass": True,
+            "geo_bypass_country": "US",
             "playlist_items": "0",
         }
 
@@ -251,7 +253,7 @@ class YouTubeProvider:
             opts["js_runtimes"] = {"node": {}}
             logger.info(f"Using Node.js for JavaScript extraction: {self.node_path}")
         else:
-            logger.warning("Node.js not found - YouTube extraction may be limited")
+            logger.warning("Node.js not found - will use Android client API")
 
         # FFmpeg
         if self.ffmpeg_path:
