@@ -1,19 +1,504 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#667eea" />
-    <meta
-      name="description"
-      content="Social Media Video Downloader - Download videos from YouTube, Instagram, Facebook, Twitter, TikTok"
-    />
-    <link rel="icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
-    <link rel="shortcut icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
-    <title>SPVB - Social Media Video Downloader</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">
+  <title>SPVB - Social Media Video Downloader</title>
+  <!-- Google AdSense -->
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3576739218613107"
+     crossorigin="anonymous"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0a0e27 0%, #1a1a3e 100%);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      border-bottom: 3px solid #00ff00;
+      margin-bottom: 40px;
+    }
+
+    .header-title {
+      flex: 1;
+      text-align: center;
+    }
+
+    /* ✨ GAMES BUTTON ✨ */
+    .nav-games-btn {
+      padding: 12px 24px;
+      background: linear-gradient(135deg, #00ff00 0%, #00ffff 100%);
+      color: #000;
+      border: 2px solid #00ff00;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .nav-games-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 8px 20px rgba(0, 255, 0, 0.4);
+      border-color: #00ffff;
+    }
+
+    .nav-games-btn:active {
+      transform: scale(0.95);
+    }
+
+    header h1 {
+      font-size: 48px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      color: #00ff00;
+      text-shadow: 0 0 20px rgba(0,255,0,0.5);
+      margin-bottom: 10px;
+    }
+
+    header p {
+      font-size: 18px;
+      color: #aaa;
+    }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-bottom: 40px;
+    }
+
+    .game-card {
+      background: linear-gradient(135deg, #1a1a3e 0%, #2d2d5f 100%);
+      border: 2px solid #00ff00;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      cursor: pointer;
+      box-shadow: 0 5px 15px rgba(0,255,0,0.2);
+    }
+
+    .game-card:hover {
+      transform: translateY(-10px);
+      box-shadow: 0 15px 30px rgba(0,255,0,0.4);
+      border-color: #00ffff;
+    }
+
+    .game-card-header {
+      background: linear-gradient(135deg, #00ff00 0%, #00ffff 100%);
+      color: #000;
+      padding: 20px;
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    .game-card-body {
+      padding: 20px;
+    }
+
+    .game-card-body p {
+      color: #aaa;
+      margin-bottom: 15px;
+      line-height: 1.6;
+    }
+
+    .game-stats {
+      display: flex;
+      justify-content: space-around;
+      padding: 15px 0;
+      border-top: 1px solid #00ff00;
+      border-bottom: 1px solid #00ff00;
+      margin-bottom: 15px;
+      font-size: 12px;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      color: #00ff00;
+      font-weight: bold;
+      font-size: 16px;
+      display: block;
+    }
+
+    .play-btn {
+      width: 100%;
+      padding: 12px;
+      background: linear-gradient(135deg, #00ff00 0%, #00ffff 100%);
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .play-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 5px 15px rgba(0,255,0,0.3);
+    }
+
+    .play-btn:active {
+      transform: scale(0.95);
+    }
+
+    .api-section {
+      background: linear-gradient(135deg, #1a1a3e 0%, #2d2d5f 100%);
+      border: 2px solid #00ffff;
+      border-radius: 8px;
+      padding: 30px;
+      margin-top: 40px;
+    }
+
+    .api-section h2 {
+      color: #00ffff;
+      margin-bottom: 20px;
+      font-size: 24px;
+    }
+
+    .api-code {
+      background: #000;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin-bottom: 15px;
+      border-left: 3px solid #00ffff;
+    }
+
+    .api-code code {
+      color: #00ffff;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+
+    .api-response {
+      background: #0a0a0a;
+      padding: 15px;
+      border-radius: 4px;
+      border-left: 3px solid #00ff00;
+      margin-top: 15px;
+    }
+
+    .api-response code {
+      color: #00ff00;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      display: block;
+      line-height: 1.6;
+    }
+
+    footer {
+      text-align: center;
+      padding: 20px;
+      margin-top: 40px;
+      border-top: 2px solid #00ff00;
+      color: #aaa;
+    }
+
+    /* ✅ MOBILE OPTIMIZATION */
+    @media (max-width: 768px) {
+      body {
+        padding: 10px;
+      }
+
+      .container {
+        padding: 0;
+      }
+
+      header {
+        flex-direction: column;
+        gap: 15px;
+        padding: 15px;
+        margin-bottom: 20px;
+      }
+
+      header h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+
+      header p {
+        font-size: 14px;
+      }
+
+      .games-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+        margin-bottom: 30px;
+      }
+
+      .game-card {
+        border-radius: 6px;
+      }
+
+      .game-card-header {
+        padding: 15px;
+        font-size: 18px;
+      }
+
+      .game-card-body {
+        padding: 15px;
+      }
+
+      .game-card-body p {
+        font-size: 14px;
+        margin-bottom: 12px;
+      }
+
+      .game-stats {
+        padding: 12px 0;
+        font-size: 11px;
+        margin-bottom: 12px;
+      }
+
+      .stat-value {
+        font-size: 14px;
+      }
+
+      .play-btn {
+        padding: 10px;
+        font-size: 14px;
+        width: 100%;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      .play-btn:active {
+        background: linear-gradient(135deg, #00dd00 0%, #00cccc 100%);
+      }
+
+      .api-section {
+        padding: 20px;
+        border-radius: 6px;
+        margin-top: 30px;
+      }
+
+      .api-section h2 {
+        font-size: 18px;
+        margin-bottom: 15px;
+      }
+
+      .api-code {
+        padding: 12px;
+        font-size: 11px;
+        margin-bottom: 12px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .api-code code {
+        font-size: 11px;
+      }
+
+      .api-response code {
+        font-size: 11px;
+      }
+
+      .nav-games-btn {
+        padding: 10px 16px;
+        font-size: 12px;
+        width: auto;
+        border-radius: 4px;
+      }
+
+      footer {
+        padding: 15px;
+        font-size: 12px;
+        margin-top: 30px;
+      }
+    }
+
+    /* ✅ EXTRA SMALL DEVICES */
+    @media (max-width: 480px) {
+      body {
+        padding: 8px;
+      }
+
+      header {
+        padding: 10px;
+        gap: 10px;
+      }
+
+      header h1 {
+        font-size: 24px;
+      }
+
+      header p {
+        font-size: 12px;
+      }
+
+      .games-grid {
+        gap: 15px;
+      }
+
+      .game-card {
+        margin-bottom: 10px;
+      }
+
+      .game-card-header {
+        padding: 12px;
+        font-size: 16px;
+      }
+
+      .game-card-body {
+        padding: 12px;
+      }
+
+      .game-card-body p {
+        font-size: 13px;
+        margin-bottom: 10px;
+      }
+
+      .game-stats {
+        padding: 10px 0;
+        font-size: 10px;
+        margin-bottom: 10px;
+      }
+
+      .play-btn {
+        padding: 10px 8px;
+        font-size: 13px;
+      }
+
+      .api-section {
+        padding: 15px;
+      }
+
+      .api-code {
+        padding: 10px;
+        font-size: 10px;
+      }
+
+      .nav-games-btn {
+        padding: 8px 12px;
+        font-size: 11px;
+      }
+
+      footer {
+        padding: 10px;
+        font-size: 11px;
+      }
+    }
+
+    /* ✅ TABLET DEVICES */
+    @media (min-width: 769px) and (max-width: 1024px) {
+      body {
+        padding: 15px;
+      }
+
+      header h1 {
+        font-size: 40px;
+      }
+
+      header p {
+        font-size: 16px;
+      }
+
+      .games-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 25px;
+      }
+
+      .nav-games-btn {
+        padding: 11px 20px;
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 20px;">
+        <div style="flex: 1;"></div>
+        <div style="text-align: center; flex: 1;">
+          <h1>🎮 GAMING SITE</h1>
+          <p>Play your favorite games online</p>
+        </div>
+        <div style="flex: 1; text-align: right;">
+          <button class="nav-games-btn" onclick="playGame()">🎮 PLAY GAMES</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="games-grid">
+      <div class="game-card">
+        <div class="game-card-header">GTA Vice City</div>
+        <div class="game-card-body">
+          <p>Experience the classic Grand Theft Auto: Vice City. Explore the neon-lit streets, complete missions, and rule the city!</p>
+
+          <div class="game-stats">
+            <div class="stat">
+              <span class="stat-value">2002</span>
+              <span>Release</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">★★★★★</span>
+              <span>Rating</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">8+</span>
+              <span>Players</span>
+            </div>
+          </div>
+
+          <button class="play-btn" onclick="playGame()">▶ PLAY NOW</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Google AdSense Ad Unit 1 -->
+    <div style="text-align: center; margin: 30px 0; min-height: 100px;">
+      <ins class="adsbygoogle"
+           style="display:inline-block;width:100%;max-width:728px;height:90px"
+           data-ad-client="ca-pub-3576739218613107"
+           data-ad-slot="1234567890"
+           data-ad-format="horizontal"></ins>
+      <script>
+           (adsbygoogle = window.adsbygoogle || []).push({});
+      </script>
+    </div>
+
+    <div class="api-section">
+      <h2>🎮 About This Gaming Platform</h2>
+      <p style="color: #aaa; margin-bottom: 15px;">
+        Welcome to our gaming platform. Play classic games directly in your browser.
+        No downloads required - just click and play!
+      </p>
+    </div>
+
+    <footer>
+      <p>© 2024 Gaming Site | Powered by Node.js + Express</p>
+      <p style="margin-top: 10px; font-size: 12px;">Server running on port 3000</p>
+    </footer>
+  </div>
+
+  <script>
+    function playGame() {
+      window.location.href = '/play/gta-vc';
+    }
+  </script>
+</body>
 </html>
