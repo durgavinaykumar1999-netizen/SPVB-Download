@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
+import ScrollingNotice from './ScrollingNotice';
 
 interface Quality {
   label: string;
@@ -358,6 +359,7 @@ function App() {
 
   return (
     <div className="app">
+      <ScrollingNotice />
       <div className="bg-grid"></div>
       <div className="bg-blob blob1"></div>
       <div className="bg-blob blob2"></div>
