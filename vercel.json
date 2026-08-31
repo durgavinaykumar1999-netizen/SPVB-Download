@@ -1,0 +1,16 @@
+{
+  "buildCommand": "npm install && cd frontend && npm install && npm run build && cp public/ads.txt ../frontend/build/ads.txt",
+  "outputDirectory": "frontend/build",
+  "public": true,
+  "headers": [
+    {
+      "source": "/ads.txt",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/plain"
+        }
+      ]
+    }
+  ]
+}
