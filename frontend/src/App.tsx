@@ -47,6 +47,13 @@ const PLATFORMS = [
   { id: 'twitter', name: 'X', color: '#FFFFFF', icon: '𝕏' },
 ];
 
+const sanitizeFilename = (filename: string): string => {
+  return filename
+    .replace(/[/\\?%*:|"<>]/g, '-')
+    .replace(/\s+/g, '_')
+    .substring(0, 200);
+};
+
 const detectPlatform = (url: string): string | null => {
   const u = url.toLowerCase();
   if (u.includes('instagram.com')) return 'Instagram';
@@ -221,7 +228,8 @@ const manualDownload = useCallback(async () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = completedDownload.filename || `download-${completedDownload.download_id}.mp4`;
+      const title = completedDownload.metadata?.title || metadata?.title || 'video';
+      link.download = `${sanitizeFilename(title)}.mp4`;
       document.body.appendChild(link);
       link.click();
       setTimeout(() => {
@@ -320,7 +328,7 @@ const manualDownload = useCallback(async () => {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `video-${item.id.substring(0, 8)}.mp4`;
+        link.download = `${sanitizeFilename(item.title)}.mp4`;
         document.body.appendChild(link);
         link.click();
         setTimeout(() => {
