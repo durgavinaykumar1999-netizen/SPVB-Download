@@ -438,7 +438,7 @@ const manualDownload = useCallback(async () => {
           </nav>
         </header>
 
-        <AdHeader />
+        {sessionId && <AdHeader />}
 
         <section className="hero-section">
           <h1>
@@ -511,7 +511,7 @@ const manualDownload = useCallback(async () => {
         <Features />
         <ScrollingNotice />
         <Footer />
-        <AdMobile />
+        {sessionId && <AdMobile />}
       </div>
     </div>
   );

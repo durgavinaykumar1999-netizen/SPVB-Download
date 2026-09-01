@@ -1564,6 +1564,7 @@ a {
   max-width: 1240px;
   margin: 0 auto;
   padding: 10px 20px 0;
+  min-height: 100px;
 }
 
 .ads-inline {
@@ -1662,6 +1663,7 @@ a {
 
 .content-main {
   min-width: 0;
+  min-height: 400px;
 }
 
 .content-sidebar {
