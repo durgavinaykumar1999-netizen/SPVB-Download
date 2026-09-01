@@ -9,6 +9,7 @@ interface AdUnitProps {
 
 function AdUnit({ atOptions, srcs, containerId, className }: AdUnitProps) {
   const injected = useRef(false);
+  const adContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (injected.current) return;
@@ -35,7 +36,56 @@ function AdUnit({ atOptions, srcs, containerId, className }: AdUnitProps) {
     }
   }, [atOptions, srcs]);
 
-  return <div className={className} id={containerId}></div>;
+  useEffect(() => {
+    if (!adContainerRef.current) return;
+
+    const container = adContainerRef.current;
+
+    const handleAdClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest('a[href]') as HTMLAnchorElement | null;
+
+      if (link && link.href && !link.classList.contains('ad-close-btn')) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(link.href, '_blank', 'noopener,noreferrer');
+      }
+    };
+
+    const processLinks = () => {
+      const links = container.querySelectorAll('a[href]');
+      links.forEach((link: Element) => {
+        const anchor = link as HTMLAnchorElement;
+        if (!anchor.hasAttribute('data-new-tab-processed')) {
+          anchor.target = '_blank';
+          anchor.rel = 'noopener noreferrer';
+          anchor.setAttribute('data-new-tab-processed', 'true');
+        }
+      });
+    };
+
+    processLinks();
+
+    const observer = new MutationObserver(() => {
+      processLinks();
+    });
+
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['href']
+    });
+
+    container.addEventListener('click', handleAdClick, true);
+
+    return () => {
+      observer.disconnect();
+      container.removeEventListener('click', handleAdClick, true);
+    };
+  }, []);
+
+  return <div className={className} id={containerId} ref={adContainerRef}></div>;
 }
 
 export default AdUnit;
