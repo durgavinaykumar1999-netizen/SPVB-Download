@@ -240,7 +240,7 @@ const manualDownload = useCallback(async () => {
     } catch (error) {
       push(`❌ Download failed: ${error}`, 'error');
     }
-  }, [apiUrl, sessionId, push, completedDownload]);
+  }, [apiUrl, sessionId, push, completedDownload, metadata]);
 
   useEffect(() => {
     if (downloads.length > 0) {
