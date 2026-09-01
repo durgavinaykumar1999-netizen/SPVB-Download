@@ -413,6 +413,9 @@ const manualDownload = useCallback(async () => {
     return <GamePage onClose={() => setShowGame(false)} />;
   }
 
+  const hasContent = sessionId && (metadata || history.length > 0);
+  const shouldShowAds = hasContent;
+
   return (
     <div className="app">
       <div className="bg-grid"></div>
@@ -438,7 +441,7 @@ const manualDownload = useCallback(async () => {
           </nav>
         </header>
 
-        {sessionId && <AdHeader />}
+        {shouldShowAds && <AdHeader />}
 
         <section className="hero-section">
           <h1>
@@ -498,11 +501,13 @@ const manualDownload = useCallback(async () => {
               <HistorySection history={history} onRedownload={redownloadFromHistory} onDelete={deleteFromHistory} />
             )}
 
-            <AdInline />
+            {shouldShowAds && <AdInline />}
             </div>
-            <aside className="content-sidebar">
-              <AdSidebar />
-            </aside>
+            {shouldShowAds && (
+              <aside className="content-sidebar">
+                <AdSidebar />
+              </aside>
+            )}
             </div>
           </section>
           </>
@@ -511,7 +516,7 @@ const manualDownload = useCallback(async () => {
         <Features />
         <ScrollingNotice />
         <Footer />
-        {sessionId && <AdMobile />}
+        {shouldShowAds && <AdMobile />}
       </div>
     </div>
   );
@@ -856,7 +861,7 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         </div>
       )}
 
-      <AdGameBanner />
+      {gameUrl && <AdGameBanner />}
     </div>
   );
 }
