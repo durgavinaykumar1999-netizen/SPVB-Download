@@ -6,3 +6,17 @@ services:
     buildCommand: |
       pip install -r backend_python/requirements.txt
     startCommand: uvicorn backend_python.main:app --host 0.0.0.0 --port $PORT
+
+  - type: web
+    name: spvb-games
+    runtime: node
+    plan: free
+    buildCommand: |
+      npm install
+      (cd frontend && npm install && npm run build)
+    startCommand: node server.js
+    envVars:
+      - key: GAME_URL
+        sync: false
+      - key: NODE_VERSION
+        value: 20.x

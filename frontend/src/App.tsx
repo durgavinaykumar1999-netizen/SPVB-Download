@@ -374,7 +374,7 @@ function App() {
             <span className="logo-text">SPVB</span>
           </div>
           <nav>
-            <a href="/play/gta-vc" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
+            <a href={process.env.REACT_APP_GAME_URL || '/play/gta-vc'} className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
               <span>🎮</span> Games
             </a>
             <button className="nav-btn">
