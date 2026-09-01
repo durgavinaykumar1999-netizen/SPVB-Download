@@ -11,6 +11,61 @@
     <link rel="icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
     <link rel="shortcut icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
     <title>SPVB - Social Media Video Downloader</title>
+    <!-- Redirect Protection for Mobile -->
+    <script>
+      (function() {
+        const isMobile = /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
+        const appDomain = window.location.hostname;
+        let redirectAttempts = 0;
+        const maxRedirectAttempts = 2;
+
+        const blockRedirect = function(url) {
+          if (!url) return false;
+          const isExternalAd = /ads|redirect|popup|tracking/i.test(url);
+          const isAppDomain = new URL(url, window.location.href).hostname === appDomain;
+          return isMobile && isExternalAd && !isAppDomain;
+        };
+
+        const originalOpen = window.open;
+        window.open = function(url, target, features) {
+          if (blockRedirect(url)) {
+            console.warn('[SPVB] Blocked external redirect:', url);
+            return null;
+          }
+          return originalOpen.call(window, url, target, features);
+        };
+
+        const originalAssign = window.location.assign;
+        window.location.assign = function(url) {
+          if (blockRedirect(url)) {
+            redirectAttempts++;
+            if (redirectAttempts <= maxRedirectAttempts) {
+              console.warn('[SPVB] Blocked redirect attempt:', url);
+              return;
+            }
+          }
+          return originalAssign.call(window.location, url);
+        };
+
+        const originalReplace = window.location.replace;
+        window.location.replace = function(url) {
+          if (blockRedirect(url)) {
+            redirectAttempts++;
+            if (redirectAttempts <= maxRedirectAttempts) {
+              console.warn('[SPVB] Blocked redirect attempt:', url);
+              return;
+            }
+          }
+          return originalReplace.call(window.location, url);
+        };
+
+        window.addEventListener('beforeunload', function(e) {
+          if (redirectAttempts > 0) {
+            redirectAttempts = 0;
+          }
+        });
+      })();
+    </script>
     <!-- Google AdSense -->
     <meta name="google-adsense-account" content="ca-pub-3576739218613107" />
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3576739218613107"

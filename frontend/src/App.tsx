@@ -190,6 +190,7 @@ function App() {
 
       const href = link.getAttribute('href');
       const isExternal = href && (href.startsWith('http') || href.startsWith('//'));
+      const isAd = link.closest('[class*="ad"]') !== null;
 
       if (isExternal && href) {
         e.preventDefault();
@@ -198,10 +199,17 @@ function App() {
       }
     };
 
+    const handlePopstate = (e: PopStateEvent) => {
+      e.preventDefault();
+      window.history.forward();
+    };
+
     document.addEventListener('click', handleLinkClick, true);
+    window.addEventListener('popstate', handlePopstate);
 
     return () => {
       document.removeEventListener('click', handleLinkClick, true);
+      window.removeEventListener('popstate', handlePopstate);
     };
   }, []);
 
