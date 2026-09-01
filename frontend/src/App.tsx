@@ -691,10 +691,24 @@ function Footer() {
 }
 
 function GamePage() {
-  const gameUrl = process.env.REACT_APP_GAME_URL || '';
+  const [gameUrl, setGameUrl] = useState('');
   const [count, setCount] = useState(5000);
   const [loaded, setLoaded] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchGameUrl = async () => {
+      try {
+        const response = await fetch('/config.json');
+        const data = await response.json();
+        setGameUrl(data.gameUrl || '');
+      } catch (err) {
+        console.error('Failed to fetch game config:', err);
+        setGameUrl('');
+      }
+    };
+    fetchGameUrl();
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => setCount(c => c + 1 + Math.floor(Math.random() * 3)), 2000 + Math.random() * 3000);
