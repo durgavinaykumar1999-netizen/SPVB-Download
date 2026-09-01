@@ -102,15 +102,6 @@ function App() {
 
   const isMobile = () => /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
 
-  const safeNavigate = (url: string) => {
-    if (!url) return;
-    if (isMobile() && (url.startsWith('http') || url.startsWith('//'))) {
-      window.open(url, '_blank', 'noopener,noreferrer');
-    } else {
-      window.location.href = url;
-    }
-  };
-
   const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
     return fetch(url, options);
   };
@@ -199,7 +190,6 @@ function App() {
 
       const href = link.getAttribute('href');
       const isExternal = href && (href.startsWith('http') || href.startsWith('//'));
-      const isInternalRoute = href && (href.startsWith('/') || href.startsWith('#'));
 
       if (isExternal && href) {
         e.preventDefault();
