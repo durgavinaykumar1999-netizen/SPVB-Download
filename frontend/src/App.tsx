@@ -100,6 +100,17 @@ function App() {
   const [validation, setValidation] = useState<string | null>(null);
   const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
 
+  const isMobile = () => /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
+
+  const safeNavigate = (url: string) => {
+    if (!url) return;
+    if (isMobile() && (url.startsWith('http') || url.startsWith('//'))) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      window.location.href = url;
+    }
+  };
+
   const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
     return fetch(url, options);
   };
@@ -176,6 +187,33 @@ function App() {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [url]);
+
+  useEffect(() => {
+    if (!isMobile()) return;
+
+    const handleLinkClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest('a[href]') as HTMLAnchorElement | null;
+
+      if (!link) return;
+
+      const href = link.getAttribute('href');
+      const isExternal = href && (href.startsWith('http') || href.startsWith('//'));
+      const isInternalRoute = href && (href.startsWith('/') || href.startsWith('#'));
+
+      if (isExternal && href) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    };
+
+    document.addEventListener('click', handleLinkClick, true);
+
+    return () => {
+      document.removeEventListener('click', handleLinkClick, true);
+    };
+  }, []);
 
   const fetchMetadata = async () => {
     if (!url || !sessionId) {
