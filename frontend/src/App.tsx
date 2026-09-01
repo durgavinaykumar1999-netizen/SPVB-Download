@@ -707,6 +707,18 @@ function GamePage() {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
+  // Mobile back button: never let it close the app from the game page.
+  // Any back navigation returns to the home screen instead of exiting.
+  useEffect(() => {
+    if (window.history.state && window.history.state.gameGuard) return;
+    window.history.pushState({ gameGuard: true }, document.title);
+    const onPop = () => {
+      window.location.replace('/');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const toggleFullscreen = () => {
     const el = document.querySelector('.game-frame');
     if (!el) return;

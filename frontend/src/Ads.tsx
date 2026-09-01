@@ -1,4 +1,23 @@
+import { useState } from 'react';
 import AdUnit from './AdUnit';
+
+function CloseableAd({ children }: { children: React.ReactNode }) {
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  return (
+    <div className="ad-close-wrap">
+      <button
+        className="ad-close-btn"
+        onClick={() => setHidden(true)}
+        aria-label="Close ad"
+        title="Close ad"
+      >
+        ✕
+      </button>
+      {children}
+    </div>
+  );
+}
 
 const header728 = (
   <AdUnit
@@ -119,34 +138,36 @@ const prn3 = (
 
 export const AdHeader = () => (
   <div className="ads-row ads-top">
-    {header728}
-    {header468}
-    {prn1}
+    <CloseableAd>{header728}</CloseableAd>
+    <CloseableAd>{header468}</CloseableAd>
+    <CloseableAd>{prn1}</CloseableAd>
   </div>
 );
 
 export const AdSidebar = () => (
   <div className="ads-sidebar">
-    {sidebar160}
-    {sidebar600}
-    {prn3}
+    <CloseableAd>{sidebar160}</CloseableAd>
+    <CloseableAd>{sidebar600}</CloseableAd>
+    <CloseableAd>{prn3}</CloseableAd>
   </div>
 );
 
 export const AdInline = () => (
   <div className="ads-row ads-inline">
-    {inline300}
-    {prn2}
+    <CloseableAd>{inline300}</CloseableAd>
+    <CloseableAd>{prn2}</CloseableAd>
   </div>
 );
 
 export const AdMobile = () => (
-  <div className="ads-mobile">{mobile50}</div>
+  <div className="ads-mobile">
+    <CloseableAd>{mobile50}</CloseableAd>
+  </div>
 );
 
 export const AdGameBanner = () => (
   <div className="game-ad-banner">
-    {header728}
-    {header468}
+    <CloseableAd>{header728}</CloseableAd>
+    <CloseableAd>{header468}</CloseableAd>
   </div>
 );

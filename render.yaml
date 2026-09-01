@@ -18,7 +18,10 @@ services:
       (cd frontend && npm install && npm run build)
     startCommand: node server.js
     envVars:
-      - key: GAME_URL
+      # Game URL is read at BUILD TIME into the frontend bundle.
+      # Set this (e.g. https://selenite.cc/resources/semag/gtavc/index.html);
+      # leave empty for the game page to show "Coming Soon".
+      - key: REACT_APP_GAME_URL
         sync: false
       - key: NODE_VERSION
         value: 20.x
