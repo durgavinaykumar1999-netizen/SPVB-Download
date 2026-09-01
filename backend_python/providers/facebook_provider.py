@@ -1,5 +1,6 @@
 import yt_dlp
 from ..utils.logger import setup_logger
+from .download_opts import build_download_opts, resolve_filename
 
 logger = setup_logger()
 
@@ -45,31 +46,17 @@ class FacebookProvider:
 
     async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         try:
-            if quality == 'best':
-                quality_value = 'bestvideo+bestaudio/best'
-            else:
-                quality_value = f'bestvideo[height={quality}]+bestaudio/best'
-
-            ydl_opts = {
-                'format': quality_value,
-                'outtmpl': f"{save_path}/%(title)s.%(ext)s",
-                'postprocessors': [{
-                    'key': 'FFmpegVideoConvertor',
-                    'preferedformat': 'mp4',
-                }],
-                'quiet': True,
-                'no_warnings': True,
-            }
+            ydl_opts = build_download_opts(save_path, quality)
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
+                filename = resolve_filename(ydl, info)
 
                 return {
                     'success': True,
                     'filename': filename,
                     'title': info.get('title', ''),
-                    'format': info.get('ext', 'mp4')
+                    'format': 'mp4'
                 }
         except Exception as e:
             logger.error(f"Facebook download error: {str(e)}")

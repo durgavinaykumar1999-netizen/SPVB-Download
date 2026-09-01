@@ -1,5 +1,6 @@
 import yt_dlp
 from ..utils.logger import setup_logger
+from .download_opts import build_download_opts, resolve_filename
 
 logger = setup_logger()
 
@@ -63,15 +64,12 @@ class TikTokProvider:
     async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         """Download TikTok video using yt-dlp (handles auth/tokens internally)"""
         try:
-            quality_value = 'best' if quality == 'best' else f'bestvideo[height<={quality}]+bestaudio/best'
-
-            ydl_opts = self._get_ydl_opts(download=True, save_path=save_path)
-            ydl_opts['format'] = quality_value
+            ydl_opts = build_download_opts(save_path, quality)
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 try:
                     info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
+                    filename = resolve_filename(ydl, info)
 
                     logger.info(f"Successfully downloaded TikTok: {info.get('title', '')}")
 
@@ -79,15 +77,16 @@ class TikTokProvider:
                         'success': True,
                         'filename': filename,
                         'title': info.get('title', ''),
-                        'format': info.get('ext', 'mp4')
+                        'format': 'mp4'
                     }
                 except yt_dlp.utils.DownloadError as e:
                     logger.warning(f"Download with quality {quality} failed: {str(e)}, using best available...")
                     # Fallback to best quality
-                    ydl_opts['format'] = 'best'
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl_fallback:
+                    fallback_opts = build_download_opts(save_path, 'best')
+                    fallback_opts['format'] = 'best'
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl_fallback:
                         info = ydl_fallback.extract_info(url, download=True)
-                        filename = ydl_fallback.prepare_filename(info)
+                        filename = resolve_filename(ydl_fallback, info)
 
                         logger.info(f"Downloaded with fallback quality: {info.get('title', '')}")
 
@@ -95,7 +94,7 @@ class TikTokProvider:
                             'success': True,
                             'filename': filename,
                             'title': info.get('title', ''),
-                            'format': info.get('ext', 'mp4'),
+                            'format': 'mp4',
                             'note': 'Downloaded with best available quality'
                         }
         except Exception as e:
