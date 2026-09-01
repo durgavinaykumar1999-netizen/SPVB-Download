@@ -371,9 +371,11 @@ const manualDownload = useCallback(async () => {
     valid: { t: '✓ URL recognized', c: 'var(--success)' },
   }[validation || ''] || null;
 
+  const [showGame, setShowGame] = useState(false);
+
   const isGameRoute = window.location.pathname.startsWith('/play/');
-  if (isGameRoute) {
-    return <GamePage />;
+  if (isGameRoute || showGame) {
+    return <GamePage onClose={() => setShowGame(false)} />;
   }
 
   return (
@@ -391,9 +393,9 @@ const manualDownload = useCallback(async () => {
             <span className="logo-text">SPVB</span>
           </div>
           <nav>
-            <a href="/play/gta-vc" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
+            <button onClick={() => setShowGame(true)} className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
               <span>🎮</span> Games
-            </a>
+            </button>
             <button className="nav-btn">
               <span>?</span> How it works
             </button>
@@ -698,7 +700,7 @@ function Footer() {
   );
 }
 
-function GamePage() {
+function GamePage({ onClose }: { onClose?: () => void } = {}) {
   const [gameUrl, setGameUrl] = useState('');
   const [count, setCount] = useState(5000);
   const [loaded, setLoaded] = useState(false);
@@ -757,7 +759,13 @@ function GamePage() {
   };
 
   const closeGame = () => {
-    if (window.confirm('Close game and return to home?')) window.location.href = '/';
+    if (window.confirm('Close game and return to home?')) {
+      if (onClose) {
+        onClose();
+      } else {
+        window.location.href = '/';
+      }
+    }
   };
 
   return (

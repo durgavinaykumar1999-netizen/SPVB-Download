@@ -1491,11 +1491,13 @@ a {
   transform: translateX(-50%);
   z-index: 450;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
-  padding: 6px;
+  gap: 8px;
+  padding: 8px;
   background: rgba(0, 0, 0, 0.55);
   border-radius: 8px;
+  max-width: calc(100% - 20px);
 }
 
 @media (max-width: 768px) {
@@ -1529,6 +1531,18 @@ a {
   .game-btn {
     padding: 7px 11px;
     font-size: 12px;
+  }
+  .game-ad-banner {
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    max-width: none;
+    gap: 6px;
+    padding: 6px;
+  }
+  .game-ad-banner .ad-close-wrap {
+    flex: 0 0 auto;
   }
 }
 
@@ -1662,5 +1676,46 @@ a {
     position: static;
     justify-content: center;
     margin-top: 20px;
+  }
+  .ads-row {
+    padding: 0 12px;
+  }
+  .ad-slot {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .ads-top {
+    padding: 8px 12px 0;
+  }
+  .ads-row {
+    gap: 8px;
+    padding: 0 8px;
+  }
+  .ad-banner,
+  .ad-rect {
+    width: 100%;
+    max-width: 100%;
+  }
+  .ad-skyscraper {
+    max-width: 100%;
+    min-height: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .ads-top {
+    padding: 6px 8px 0;
+  }
+  .ads-inline {
+    margin-top: 16px;
+    padding-top: 12px;
+  }
+  .ad-slot {
+    min-height: 40px;
+  }
+  .ad-banner {
+    height: auto;
   }
 }
