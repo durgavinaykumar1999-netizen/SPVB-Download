@@ -1,6 +1,12 @@
 {
   "buildCommand": "npm install && cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/build",
+  "rewrites": [
+    {
+      "source": "/play/gta-vc",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/ads.txt",

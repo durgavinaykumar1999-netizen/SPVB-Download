@@ -1,29 +1,14 @@
 /* ═══════════════════════════════════════════════════════════════ */
-/* SCROLLING NOTICE BANNER - STICKY AT TOP */
+/* SCROLLING NOTICE BANNER - FOOTER */
 /* ═══════════════════════════════════════════════════════════════ */
 
 .scrolling-notice-banner {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
   background: linear-gradient(135deg, #1e1b4b 0%, #2d1b69 50%, #1a1a2e 100%);
-  border-bottom: 3px solid #ef4444;
+  border-top: 3px solid #ef4444;
   padding: 12px 20px;
-  z-index: 999;
-  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
-  animation: slideDown 0.4s ease-out;
-}
-
-@keyframes slideDown {
-  from {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  z-index: 5;
+  box-shadow: 0 -4px 20px rgba(239, 68, 68, 0.3);
 }
 
 .notice-content {
@@ -444,25 +429,5 @@
   .terms-section li {
     margin-bottom: 5px;
     font-size: 11px;
-  }
-}
-
-/* ═══════════════════════════════════════════════════════════════ */
-/* PAGE CONTENT OFFSET FOR FIXED NOTICE */
-/* ═══════════════════════════════════════════════════════════════ */
-
-.app {
-  padding-top: 55px; /* Adjust based on notice height */
-}
-
-@media (max-width: 768px) {
-  .app {
-    padding-top: 50px;
-  }
-}
-
-@media (max-width: 480px) {
-  .app {
-    padding-top: 45px;
   }
 }

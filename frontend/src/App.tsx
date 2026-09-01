@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
-import { AdHeader, AdSidebar, AdInline, AdMobile } from './Ads';
+import { AdHeader, AdSidebar, AdInline, AdMobile, AdGameBanner } from './Ads';
 
 interface Quality {
   label: string;
@@ -358,9 +358,13 @@ function App() {
     valid: { t: '✓ URL recognized', c: 'var(--success)' },
   }[validation || ''] || null;
 
+  const isGameRoute = window.location.pathname.startsWith('/play/');
+  if (isGameRoute) {
+    return <GamePage />;
+  }
+
   return (
     <div className="app">
-      <ScrollingNotice />
       <div className="bg-grid"></div>
       <div className="bg-blob blob1"></div>
       <div className="bg-blob blob2"></div>
@@ -374,7 +378,7 @@ function App() {
             <span className="logo-text">SPVB</span>
           </div>
           <nav>
-            <a href={process.env.REACT_APP_GAME_URL || '/play/gta-vc'} className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
+            <a href="/play/gta-vc" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
               <span>🎮</span> Games
             </a>
             <button className="nav-btn">
@@ -455,6 +459,7 @@ function App() {
         )}
 
         <Features />
+        <ScrollingNotice />
         <Footer />
         <AdMobile />
       </div>
@@ -677,6 +682,100 @@ function Footer() {
         <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Contact Us</button>
       </p>
     </footer>
+  );
+}
+
+function GamePage() {
+  const gameUrl = process.env.REACT_APP_GAME_URL || '';
+  const [count, setCount] = useState(5000);
+  const [loaded, setLoaded] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setInterval(() => setCount(c => c + 1 + Math.floor(Math.random() * 3)), 2000 + Math.random() * 3000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent)) {
+      setControlsOpen(true);
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setControlsOpen(v => !v);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  const toggleFullscreen = () => {
+    const el = document.querySelector('.game-frame');
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      (el as HTMLElement).requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
+  const closeGame = () => {
+    if (window.confirm('Close game and return to home?')) window.location.href = '/';
+  };
+
+  return (
+    <div className="game-page">
+      <div className="game-header">
+        <h1>Grand Theft Auto: Vice City</h1>
+        <div className="game-player-count">
+          <span className="live-dot"></span>
+          <strong>{count.toLocaleString('en-US')}</strong> Playing
+        </div>
+        <div className="game-header-actions">
+          <button className="game-btn" onClick={() => setControlsOpen(v => !v)}>ℹ️ Controls</button>
+          <button className="game-btn green" onClick={toggleFullscreen}>⛶ Fullscreen</button>
+          <button className="game-btn red" onClick={closeGame}>✕ Close</button>
+        </div>
+      </div>
+
+      <div className="game-body">
+        {gameUrl ? (
+          <div className="game-frame">
+            <iframe
+              title="game"
+              src={gameUrl}
+              allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              onLoad={() => setLoaded(true)}
+            />
+            {!loaded && (
+              <div className="game-loading">
+                <div className="spinner"></div>
+                <p>Loading game...</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="game-coming-soon">
+            <div className="coming-soon-icon">🚧</div>
+            <h2>Coming Soon</h2>
+            <p>This game is not available yet. Please check back later.</p>
+            <a href="/" className="game-btn light">🏠 Back to Home</a>
+          </div>
+        )}
+      </div>
+
+      {controlsOpen && gameUrl && (
+        <div className="game-controls-overlay">
+          <button className="close-btn-overlay" onClick={() => setControlsOpen(false)}>✕</button>
+          <strong>🖥️ Desktop Controls:</strong>
+          <div>Arrow Keys - Move<br />Space - Action<br />E - Enter Vehicle<br />WASD - Alternative Controls</div>
+          <strong>📱 Mobile Controls:</strong>
+          <div>Touch buttons on screen<br />Swipe gestures<br />Tap to interact</div>
+          <strong>⌨️ General:</strong>
+          <div>F - Fullscreen<br />ESC - Show/Hide Controls</div>
+        </div>
+      )}
+
+      <AdGameBanner />
+    </div>
   );
 }
 

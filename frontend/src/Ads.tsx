@@ -143,3 +143,10 @@ export const AdInline = () => (
 export const AdMobile = () => (
   <div className="ads-mobile">{mobile50}</div>
 );
+
+export const AdGameBanner = () => (
+  <div className="game-ad-banner">
+    {header728}
+    {header468}
+  </div>
+);
