@@ -1,7 +1,7 @@
 import yt_dlp
 import instaloader
 from ..utils.logger import setup_logger
-from .download_opts import build_download_opts, resolve_filename
+from .download_opts import build_download_opts, download_with_audio
 
 logger = setup_logger()
 
@@ -96,17 +96,14 @@ class InstagramProvider:
     async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         try:
             ydl_opts = build_download_opts(save_path, quality)
+            info, filename = download_with_audio(ydl_opts, url)
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = resolve_filename(ydl, info)
-
-                return {
-                    'success': True,
-                    'filename': filename,
-                    'title': info.get('title', ''),
-                    'format': 'mp4'
-                }
+            return {
+                'success': True,
+                'filename': filename,
+                'title': info.get('title', ''),
+                'format': 'mp4'
+            }
         except Exception as e:
             logger.error(f"Instagram download error: {str(e)}")
             raise

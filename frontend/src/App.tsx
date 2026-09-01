@@ -88,10 +88,10 @@ function App() {
   const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
   const [phase, setPhase] = useState<'idle' | 'loading' | 'result' | 'error'>('idle');
   const [downloadState, setDownloadState] = useState<string | null>(null);
+  const [completedDownload, setCompletedDownload] = useState<Download | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
-  const autoDownloadedRef = useRef<Set<string>>(new Set());
 
   const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
     return fetch(url, options);
@@ -210,28 +210,29 @@ function App() {
     }
   };
 
-  const autoDownloadFile = useCallback(async (downloadId: string, filename: string) => {
+const manualDownload = useCallback(async () => {
+    if (!sessionId || !completedDownload) return;
+    push('⬇️ Downloading video...');
     try {
-      const res = await apiCall(`${apiUrl}/api/download/${downloadId}/auto-download?session_id=${sessionId}`);
-      if (!res.ok) throw new Error('Auto-download failed');
+      const res = await apiCall(`${apiUrl}/api/download/${completedDownload.download_id}/auto-download?session_id=${sessionId}`);
+      if (!res.ok) throw new Error('Download failed');
 
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = filename || `download-${downloadId}`;
+      link.download = completedDownload.filename || `download-${completedDownload.download_id}.mp4`;
       document.body.appendChild(link);
       link.click();
       setTimeout(() => {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(link);
       }, 100);
-
-      push('✅ Download complete!');
+      push('✅ Video downloaded!');
     } catch (error) {
-      push(`⚠️ File ready but auto-download failed: ${error}`, 'error');
+      push(`❌ Download failed: ${error}`, 'error');
     }
-  }, [apiUrl, sessionId, push]);
+  }, [apiUrl, sessionId, push, completedDownload]);
 
   useEffect(() => {
     if (downloads.length > 0) {
@@ -241,34 +242,31 @@ function App() {
         setDownloadState(`downloading_${progress}`);
       } else if (latestDownload.status === 'completed') {
         setDownloadState('complete');
-        // Only auto-download once per download ID
-        if (latestDownload.filename && !autoDownloadedRef.current.has(latestDownload.download_id)) {
-          autoDownloadedRef.current.add(latestDownload.download_id);
-          autoDownloadFile(latestDownload.download_id, latestDownload.filename);
+        setCompletedDownload(latestDownload);
 
-          // Save to history
-          const historyItem: HistoryItem = {
-            id: latestDownload.download_id,
-            url: url || '',
-            title: metadata?.title || 'Unknown Video',
-            thumbnail: metadata?.thumbnail || '',
-            platform: metadata?.platform || 'Unknown',
-            quality: typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality,
-            downloadedAt: Date.now(),
-            metadata: metadata || undefined,
-          };
-          setHistory(prev => {
-            const updated = [historyItem, ...prev];
-            localStorage.setItem('spvb_download_history', JSON.stringify(updated));
-            return updated;
-          });
-        }
+        // Save to history
+        const historyItem: HistoryItem = {
+          id: latestDownload.download_id,
+          url: url || '',
+          title: metadata?.title || 'Unknown Video',
+          thumbnail: metadata?.thumbnail || '',
+          platform: metadata?.platform || 'Unknown',
+          quality: typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality,
+          downloadedAt: Date.now(),
+          metadata: metadata || undefined,
+        };
+        setHistory(prev => {
+          if (prev.some(h => h.id === latestDownload.download_id)) return prev;
+          const updated = [historyItem, ...prev];
+          localStorage.setItem('spvb_download_history', JSON.stringify(updated));
+          return updated;
+        });
       } else if (latestDownload.status === 'error') {
         setDownloadState(null);
         push(`❌ Download error: ${latestDownload.error}`, 'error');
       }
     }
-  }, [downloads, autoDownloadFile, push, url, metadata, selectedQuality]);
+  }, [downloads, push, url, metadata, selectedQuality]);
 
   const startDownload = async () => {
     if (!url || !sessionId) {
@@ -276,9 +274,8 @@ function App() {
       return;
     }
 
-    // Clear the auto-download tracking for new downloads
-    autoDownloadedRef.current.clear();
     setDownloadState('preparing');
+    setCompletedDownload(null);
     try {
       const qualityStr = typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality;
       const res = await apiCall(`${apiUrl}/api/download`, {
@@ -302,6 +299,14 @@ function App() {
     } catch (error) {
       push(`❌ Error: ${error}`, 'error');
       setDownloadState(null);
+    }
+  };
+
+  const handleDownload = () => {
+    if (downloadState === 'complete' && completedDownload) {
+      manualDownload();
+    } else {
+      startDownload();
     }
   };
 
@@ -439,7 +444,7 @@ function App() {
                     data={metadata}
                     selectedQuality={selectedQuality}
                     setSelectedQuality={setSelectedQuality}
-                    onDownload={startDownload}
+                    onDownload={handleDownload}
                     downloadState={downloadState}
                   />
                 )}
@@ -586,7 +591,7 @@ function ResultCard({ data, selectedQuality, setSelectedQuality, onDownload, dow
               <span className="spinner"></span>⬇️ {downloadState.split('_')[1] || '0'}%
             </>
           ) : downloadState === 'complete' ? (
-            <>✅ Complete</>
+            <>⬇️ Download 100%</>
           ) : (
             <>⬇️ Download {typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality}</>
           )}

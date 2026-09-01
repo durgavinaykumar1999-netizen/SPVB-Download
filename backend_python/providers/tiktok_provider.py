@@ -1,6 +1,6 @@
 import yt_dlp
 from ..utils.logger import setup_logger
-from .download_opts import build_download_opts, resolve_filename
+from .download_opts import build_download_opts, download_with_audio
 
 logger = setup_logger()
 
@@ -66,37 +66,33 @@ class TikTokProvider:
         try:
             ydl_opts = build_download_opts(save_path, quality)
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    info = ydl.extract_info(url, download=True)
-                    filename = resolve_filename(ydl, info)
+            try:
+                info, filename = download_with_audio(ydl_opts, url)
 
-                    logger.info(f"Successfully downloaded TikTok: {info.get('title', '')}")
+                logger.info(f"Successfully downloaded TikTok: {info.get('title', '')}")
 
-                    return {
-                        'success': True,
-                        'filename': filename,
-                        'title': info.get('title', ''),
-                        'format': 'mp4'
-                    }
-                except yt_dlp.utils.DownloadError as e:
-                    logger.warning(f"Download with quality {quality} failed: {str(e)}, using best available...")
-                    # Fallback to best quality
-                    fallback_opts = build_download_opts(save_path, 'best')
-                    fallback_opts['format'] = 'best'
-                    with yt_dlp.YoutubeDL(fallback_opts) as ydl_fallback:
-                        info = ydl_fallback.extract_info(url, download=True)
-                        filename = resolve_filename(ydl_fallback, info)
+                return {
+                    'success': True,
+                    'filename': filename,
+                    'title': info.get('title', ''),
+                    'format': 'mp4'
+                }
+            except yt_dlp.utils.DownloadError as e:
+                logger.warning(f"Download with quality {quality} failed: {str(e)}, using best available...")
+                # Fallback to best quality (audio-first to avoid silent video)
+                fallback_opts = build_download_opts(save_path, 'best')
+                fallback_opts['format'] = 'best[acodec!=none]/best'
+                info, filename = download_with_audio(fallback_opts, url)
 
-                        logger.info(f"Downloaded with fallback quality: {info.get('title', '')}")
+                logger.info(f"Downloaded with fallback quality: {info.get('title', '')}")
 
-                        return {
-                            'success': True,
-                            'filename': filename,
-                            'title': info.get('title', ''),
-                            'format': 'mp4',
-                            'note': 'Downloaded with best available quality'
-                        }
+                return {
+                    'success': True,
+                    'filename': filename,
+                    'title': info.get('title', ''),
+                    'format': 'mp4',
+                    'note': 'Downloaded with best available quality'
+                }
         except Exception as e:
             logger.error(f"TikTok download error: {str(e)}")
             raise
