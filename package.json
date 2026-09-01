@@ -1,0 +1,27 @@
+{
+  "name": "spvb-unified-platform",
+  "version": "1.0.0",
+  "description": "Unified Platform - Games + Instagram/Social Media Downloader",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build-frontend": "cd frontend && npm run build",
+    "setup": "npm install && cd frontend && npm install && npm run build"
+  },
+  "keywords": [
+    "game",
+    "instagram",
+    "facebook",
+    "tiktok",
+    "twitter",
+    "downloader"
+  ],
+  "author": "SPVB",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2"
+  }
+}

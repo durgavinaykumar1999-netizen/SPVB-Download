@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
+import { AdHeader, AdSidebar, AdInline, AdMobile } from './Ads';
 
 interface Quality {
   label: string;
@@ -373,6 +374,9 @@ function App() {
             <span className="logo-text">SPVB</span>
           </div>
           <nav>
+            <a href="/play/gta-vc" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
+              <span>🎮</span> Games
+            </a>
             <button className="nav-btn">
               <span>?</span> How it works
             </button>
@@ -380,16 +384,22 @@ function App() {
           </nav>
         </header>
 
+        <AdHeader />
+
         <section className="hero-section">
           <h1>
             <span className="gradient-text">SPVB</span> Downloader
           </h1>
           <p>Download and process videos from your favorite platforms with speed and security.</p>
           <PlatformBadges />
+          <LivePlayers />
         </section>
 
         {sessionId && (
+          <>
           <section className="main-content">
+            <div className="content-layout">
+            <div className="content-main">
 
             <div className="tabs-container">
               <button
@@ -433,16 +443,41 @@ function App() {
             ) : (
               <HistorySection history={history} onRedownload={redownloadFromHistory} onDelete={deleteFromHistory} />
             )}
+
+            <AdInline />
+            </div>
+            <aside className="content-sidebar">
+              <AdSidebar />
+            </aside>
+            </div>
           </section>
+          </>
         )}
 
         <Features />
         <Footer />
+        <AdMobile />
       </div>
     </div>
   );
 }
 
+
+function LivePlayers() {
+  const [count, setCount] = useState(5000);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCount(c => c + 1 + Math.floor(Math.random() * 3));
+    }, 2000 + Math.random() * 3000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <div className="hero-live-players">
+      <span className="live-dot"></span>
+      <strong>{count.toLocaleString('en-US')}+</strong> Players Online Now
+    </div>
+  );
+}
 
 function PlatformBadges() {
   return (

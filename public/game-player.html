@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Game Player</title>
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3576739218613107" crossorigin="anonymous"></script>
+  <script src="https://pl31124194.profitableratecpmnetwork.com/95/d8/cf/95d8cf0051e91631d54da7bc56ecbca1.js"></script>
+  <script async="async" data-cfasync="false" src="https://pl31124195.profitableratecpmnetwork.com/0221bc3a4d9d8690c9c87b8d892de725/invoke.js"></script>
+  <script src="https://pl31124197.profitableratecpmnetwork.com/ed/81/a6/ed81a612a8e2f2946bf640986f3a2b90.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #000;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      color: #fff;
+    }
+
+    .game-ad-banner {
+      position: fixed;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 50;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 10px;
+      padding: 6px;
+      background: rgba(0, 0, 0, 0.6);
+      border-radius: 8px;
+    }
+
+    .game-ad-banner iframe {
+      border-radius: 4px;
+    }
+
+    .game-container {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .game-header {
+      background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      color: white;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 3px solid #00ff00;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    .game-header h1 {
+      font-size: 24px;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+
+    .header-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .player-count {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0,255,0,0.12);
+      border: 1px solid #00ff88;
+      color: #00ff88;
+      padding: 8px 16px;
+      border-radius: 30px;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .player-count strong {
+      font-size: 17px;
+      color: #fff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .live-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #00ff88;
+      animation: pulse 1s infinite;
+      box-shadow: 0 0 8px #00ff88;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.3; transform: scale(0.7); }
+    }
+
+    .status {
+      font-size: 12px;
+      color: #00ff00;
+      padding: 5px 10px;
+      background: rgba(0,255,0,0.1);
+      border-radius: 4px;
+    }
+
+    .btn {
+      padding: 8px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+
+    .btn-info {
+      background: #0066cc;
+      color: white;
+    }
+
+    .btn-info:hover {
+      background: #0052a3;
+    }
+
+    .btn-fullscreen {
+      background: #00aa00;
+      color: white;
+    }
+
+    .btn-fullscreen:hover {
+      background: #008800;
+    }
+
+    .btn-close {
+      background: #ff4444;
+      color: white;
+    }
+
+    .btn-close:hover {
+      background: #cc0000;
+    }
+
+    .game-frame {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+      background: #000;
+    }
+
+    .game-area {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    .game-area iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .coming-soon {
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px 20px;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+    }
+
+    .coming-soon.active {
+      display: flex;
+    }
+
+    .coming-soon-icon {
+      font-size: 72px;
+      margin-bottom: 20px;
+      animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-15px); }
+    }
+
+    .coming-soon h2 {
+      font-size: 42px;
+      color: #00ff00;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+    }
+
+    .coming-soon p {
+      font-size: 16px;
+      color: #aaa;
+      margin-bottom: 30px;
+      max-width: 400px;
+    }
+
+    .loading-spinner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      display: none;
+      z-index: 10;
+    }
+
+    .loading-spinner.active {
+      display: block;
+    }
+
+    .spinner {
+      border: 4px solid rgba(0,255,0,0.3);
+      border-top: 4px solid #00ff00;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .controls-overlay {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      background: rgba(0,0,0,0.9);
+      padding: 20px;
+      border-radius: 8px;
+      border: 2px solid #00ff00;
+      color: #00ff00;
+      display: none;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .controls-overlay.active {
+      display: block;
+      animation: slideUp 0.5s ease;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .controls-overlay strong {
+      color: #00ff00;
+      font-size: 14px;
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 5px;
+    }
+
+    .controls-overlay::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    .controls-overlay::-webkit-scrollbar-track {
+      background: rgba(0,255,0,0.1);
+      border-radius: 4px;
+    }
+
+    .controls-overlay::-webkit-scrollbar-thumb {
+      background: #00ff00;
+      border-radius: 4px;
+    }
+
+    .close-btn-overlay {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #ff4444;
+      color: white;
+      border: none;
+      padding: 5px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+      .game-header {
+        flex-direction: column;
+        gap: 10px;
+        padding: 10px;
+      }
+
+      .game-header h1 {
+        font-size: 18px;
+      }
+
+      .coming-soon-icon {
+        font-size: 48px;
+      }
+
+      .coming-soon h2 {
+        font-size: 28px;
+      }
+
+      .coming-soon p {
+        font-size: 14px;
+      }
+
+      .player-count {
+        font-size: 12px;
+        padding: 6px 10px;
+      }
+
+      .player-count strong {
+        font-size: 14px;
+      }
+
+      .header-right {
+        width: 100%;
+        justify-content: flex-end;
+      }
+
+      .controls-overlay {
+        bottom: 10px;
+        left: 10px;
+        right: 10px;
+        padding: 15px;
+        font-size: 12px;
+      }
+
+      .btn {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .btn-info {
+        display: none;
+      }
+
+      .status {
+        font-size: 10px;
+        padding: 3px 8px;
+      }
+    }
+
+    .error-message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(255,0,0,0.9);
+      padding: 30px;
+      border-radius: 8px;
+      text-align: center;
+      display: none;
+      z-index: 100;
+      max-width: 400px;
+    }
+
+    .error-message.active {
+      display: block;
+    }
+
+    .error-message h2 {
+      color: #ff4444;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+      <div class="game-header">
+      <h1 id="gameTitle">Loading Game...</h1>
+      <div class="player-count" id="playerCount"><span class="live-dot"></span> <strong id="playerCountNum">5,000</strong> Playing</div>
+      <div class="header-right">
+        <span class="status" id="status">⏳ Initializing...</span>
+        <button class="btn btn-info" onclick="toggleControls()">ℹ️ Controls</button>
+        <button class="btn btn-fullscreen" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+        <button class="btn btn-close" onclick="closeGame()">✕ Close</button>
+      </div>
+    </div>
+
+    <div class="game-frame">
+      <div class="coming-soon" id="comingSoon">
+        <div class="coming-soon-icon">🚧</div>
+        <h2>Coming Soon</h2>
+        <p>This game is not available yet. Please check back later.</p>
+        <button class="btn btn-info" onclick="window.location.href='/'">🏠 Back to Home</button>
+      </div>
+
+      <div class="game-area" id="gameArea">
+        <div class="loading-spinner active" id="loadingSpinner">
+          <div class="spinner"></div>
+          <p>Loading game...</p>
+        </div>
+
+        <iframe id="gameFrame" allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"></iframe>
+      </div>
+
+      <div class="error-message" id="errorMessage">
+        <h2>Error Loading Game</h2>
+        <p id="errorText"></p>
+      </div>
+
+      <div class="controls-overlay" id="controlsOverlay">
+        <button class="close-btn-overlay" onclick="toggleControls()">✕</button>
+        <strong>🖥️ Desktop Controls:</strong>
+        <div id="desktopControls">
+          Arrow Keys - Move<br>
+          Space - Action<br>
+          E - Enter Vehicle<br>
+          WASD - Alternative Controls
+        </div>
+
+        <strong>📱 Mobile Controls:</strong>
+        <div id="mobileControls">
+          Touch buttons on screen<br>
+          Swipe gestures<br>
+          Tap to interact
+        </div>
+
+        <strong>⌨️ General:</strong>
+        <div>
+          F - Fullscreen<br>
+          ESC - Show/Hide Controls
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="game-ad-banner">
+    <script>
+      atOptions = {
+        'key' : 'e00807f9355f6f59d09b4cb9632b1930',
+        'format' : 'iframe',
+        'height' : 90,
+        'width' : 728,
+        'params' : {}
+      };
+    </script>
+    <script src="https://www.highrevenueformat.com/e00807f9355f6f59d09b4cb9632b1930/invoke.js"></script>
+    <script>
+      atOptions = {
+        'key' : 'c51f0a9e64d78d55f75a4ccd8eedc96c',
+        'format' : 'iframe',
+        'height' : 60,
+        'width' : 468,
+        'params' : {}
+      };
+    </script>
+    <script src="https://www.highrevenueformat.com/c51f0a9e64d78d55f75a4ccd8eedc96c/invoke.js"></script>
+  </div>
+
+  <script>
+    const isMobile = /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
+
+    // Real-time player count - starts at 5000 and increments live
+    (function initPlayerCount() {
+      let count = 5000;
+      const counterEl = document.getElementById('playerCountNum');
+      const increment = () => {
+        count += 1 + Math.floor(Math.random() * 3);
+        if (counterEl) {
+          counterEl.textContent = count.toLocaleString('en-US');
+        }
+      };
+      // Random interval between 2-5 seconds for natural feel
+      const schedule = () => {
+        const delay = 2000 + Math.random() * 3000;
+        setTimeout(() => {
+          increment();
+          schedule();
+        }, delay);
+      };
+      schedule();
+    })();
+
+    async function loadGame() {
+      try {
+        const response = await fetch('/api/game/gta-vc');
+        const data = await response.json();
+
+        const gameFrame = document.getElementById('gameFrame');
+        const gameTitle = document.getElementById('gameTitle');
+        const status = document.getElementById('status');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const comingSoon = document.getElementById('comingSoon');
+        const gameArea = document.getElementById('gameArea');
+
+        // No game URL configured -> show Coming Soon
+        if (!data.available || !data.gameUrl) {
+          if (gameArea) gameArea.style.display = 'none';
+          if (comingSoon) comingSoon.classList.add('active');
+          if (status) status.textContent = '🚧 Coming Soon';
+          if (gameTitle) gameTitle.textContent = data.title || 'Game';
+          return;
+        }
+
+        gameFrame.src = data.gameUrl;
+        gameTitle.textContent = data.title;
+        status.textContent = '✅ Game Loaded';
+
+        // Handle iframe load
+        gameFrame.onload = () => {
+          loadingSpinner.classList.remove('active');
+          console.log('Game loaded successfully');
+        };
+
+        gameFrame.onerror = () => {
+          showError('Failed to load game from external source');
+          loadingSpinner.classList.remove('active');
+        };
+
+        // Show controls info on mobile
+        if (isMobile) {
+          console.log('📱 Mobile device detected');
+          setTimeout(() => {
+            document.getElementById('controlsOverlay').classList.add('active');
+          }, 1000);
+        } else {
+          console.log('🖥️ Desktop device detected');
+        }
+
+      } catch (error) {
+        console.error('Error loading game:', error);
+        showError('Error loading game. Please try again.');
+      }
+    }
+
+    function toggleControls() {
+      document.getElementById('controlsOverlay').classList.toggle('active');
+    }
+
+    function toggleFullscreen() {
+      const gameFrame = document.querySelector('.game-frame');
+      if (!document.fullscreenElement) {
+        gameFrame.requestFullscreen().catch(err => {
+          console.error('Fullscreen request failed:', err);
+        });
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function closeGame() {
+      if (confirm('Close game and return to home?')) {
+        window.location.href = '/';
+      }
+    }
+
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      document.getElementById('errorText').textContent = message;
+      errorDiv.classList.add('active');
+    }
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+      if (e.key === 'Escape') {
+        toggleControls();
+      }
+    });
+
+    // Load game on page load
+    window.addEventListener('load', loadGame);
+
+    // Auto-hide controls overlay after 5 seconds on desktop
+    if (!isMobile) {
+      setTimeout(() => {
+        if (document.getElementById('controlsOverlay').classList.contains('active')) {
+          document.getElementById('controlsOverlay').classList.remove('active');
+        }
+      }, 5000);
+    }
+  </script>
+</body>
+</html>
