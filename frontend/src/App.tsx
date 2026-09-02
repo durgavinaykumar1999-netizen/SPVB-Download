@@ -3,6 +3,11 @@ import './App.css';
 import ScrollingNotice from './ScrollingNotice';
 import { AdHeader, AdSidebar, AdInline, AdMobile, AdGameBanner } from './Ads';
 
+// TEMPORARILY DISABLED FOR GOOGLE ADSENSE APPROVAL
+// Set to true to re-enable third-party ad network (highrevenueformat + profitableratecpmnetwork)
+// If Google approves with only Google AdSense, keep as false
+const SHOW_THIRD_PARTY_ADS = false;
+
 interface Quality {
   label: string;
   value: number | string;
@@ -441,7 +446,7 @@ const manualDownload = useCallback(async () => {
           </nav>
         </header>
 
-        {shouldShowAds && <AdHeader />}
+        {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdHeader />}
 
         <section className="hero-section">
           <h1>
@@ -501,9 +506,9 @@ const manualDownload = useCallback(async () => {
               <HistorySection history={history} onRedownload={redownloadFromHistory} onDelete={deleteFromHistory} />
             )}
 
-            {shouldShowAds && <AdInline />}
+            {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdInline />}
             </div>
-            {shouldShowAds && (
+            {shouldShowAds && SHOW_THIRD_PARTY_ADS && (
               <aside className="content-sidebar">
                 <AdSidebar />
               </aside>
@@ -516,7 +521,7 @@ const manualDownload = useCallback(async () => {
         <Features />
         <ScrollingNotice />
         <Footer />
-        {shouldShowAds && <AdMobile />}
+        {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdMobile />}
       </div>
     </div>
   );
@@ -861,7 +866,7 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         </div>
       )}
 
-      {gameUrl && <AdGameBanner />}
+      {gameUrl && SHOW_THIRD_PARTY_ADS && <AdGameBanner />}
     </div>
   );
 }
