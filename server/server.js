@@ -24,6 +24,7 @@ const PORT = process.env.PORT || 1406;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // In-memory storage (for development - replace with database in production)
 const games = [];
@@ -36,12 +37,22 @@ const userStats = new Map();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
-// ============ API ENDPOINTS (must be before static files) ============
-console.log('[STARTUP] Registering API endpoints...');
+console.log('\n=== SPVB PLATFORM SERVER STARTING ===');
+console.log('[STARTUP] Port:', PORT);
+console.log('[STARTUP] Admin users:', Array.from(adminUsers.keys()));
+console.log('[STARTUP] Registering API endpoints...\n');
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Admin Login
 app.post('/api/admin/login', (req, res) => {
-  console.log('[DEBUG] POST /api/admin/login called');
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -116,7 +127,6 @@ app.delete('/api/admin/games/:id', verifyAdminToken, (req, res) => {
 
 // Get Public Games List
 app.get('/api/games/list', (req, res) => {
-  console.log('[DEBUG] GET /api/games/list called - returning', games.length, 'games');
   res.json({ success: true, games });
 });
 
@@ -189,26 +199,29 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true, message: 'Session terminated' });
 });
 
-// ============ STATIC FILES & SPA FALLBACK ============
-console.log('[STARTUP] Configuring static files...');
-const buildPath = path.join(__dirname, '..', 'frontend', 'build');
-const fs = require('fs');
-if (fs.existsSync(buildPath)) {
-  app.use(express.static(buildPath));
-  console.log('[STARTUP] Frontend build found at:', buildPath);
-} else {
-  console.log('[STARTUP] Frontend build not found at', buildPath, '- API only mode');
-}
+console.log('[STARTUP] ✓ API endpoints registered successfully\n');
 
 // 404 handler for missing API routes
 app.all('/api/*', (req, res) => {
-  res.status(404).json({ success: false, message: 'API endpoint not found', path: req.path, method: req.method });
+  res.status(404).json({ 
+    success: false, 
+    message: 'API endpoint not found', 
+    path: req.path, 
+    method: req.method 
+  });
 });
 
-// SPA fallback - the React app handles all routes (including /admin, /play/gta-vc)
-// Only serve index.html for non-API routes
+// ============ STATIC FILES & SPA FALLBACK ============
+const buildPath = path.join(__dirname, '..', 'frontend', 'build');
+if (fs.existsSync(buildPath)) {
+  app.use(express.static(buildPath));
+  console.log('[STARTUP] Frontend build found - serving static files');
+} else {
+  console.log('[STARTUP] Frontend build not found - API only mode');
+}
+
+// SPA fallback
 app.get('*', (req, res) => {
-  console.log('[DEBUG] SPA fallback for:', req.path);
   try {
     const indexPath = path.join(buildPath, 'index.html');
     if (fs.existsSync(indexPath)) {
@@ -217,48 +230,14 @@ app.get('*', (req, res) => {
       res.status(404).json({ success: false, message: 'Frontend not built' });
     }
   } catch (err) {
-    res.status(404).json({ success: false, message: 'Page not found', error: err.message });
+    res.status(404).json({ success: false, message: 'Page not found' });
   }
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Server is running',
-    routes: [
-      'POST /api/admin/login',
-      'GET /api/admin/games',
-      'POST /api/admin/games/add',
-      'DELETE /api/admin/games/:id',
-      'GET /api/games/list',
-      'POST /api/session',
-      'GET /api/downloads',
-      'GET /api/admin/stats',
-      'POST /api/logout'
-    ],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Debug endpoint
-app.get('/debug', (req, res) => {
-  res.json({
-    env: process.env.NODE_ENV,
-    port: PORT,
-    adminUsername: process.env.ADMIN_USERNAME || 'admin',
-    hasMongoDb: !!process.env.MONGODB_URI,
-    hasCloudinary: !!process.env.CLOUDINARY_API_KEY
-  });
-});
-
 app.listen(PORT, () => {
-  console.log(`\n🎮 SPVB Platform Server running at http://localhost:${PORT}`);
-  console.log(`📍 Health: http://localhost:${PORT}/health`);
-  console.log(`📍 API: http://localhost:${PORT}/api`);
-  console.log(`📍 Admin Login: POST http://localhost:${PORT}/api/admin/login`);
-  console.log(`📍 Home: http://localhost:${PORT}`);
-  console.log(`🕹️  Admin: http://localhost:${PORT}/admin`);
-  console.log(`🎮 Games: http://localhost:${PORT}/play`);
-  console.log(`📊 Stats: http://localhost:${PORT}/api/admin/stats\n`);
+  console.log(`\n✅ SPVB Platform Server running successfully`);
+  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log(`🔑 API Base: http://localhost:${PORT}/api`);
+  console.log(`📊 Health: http://localhost:${PORT}/health`);
+  console.log(`\n=== SERVER READY ===\n`);
 });
