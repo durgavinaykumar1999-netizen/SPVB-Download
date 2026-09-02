@@ -116,6 +116,7 @@ app.delete('/api/admin/games/:id', verifyAdminToken, (req, res) => {
 
 // Get Public Games List
 app.get('/api/games/list', (req, res) => {
+  console.log('[DEBUG] GET /api/games/list called - returning', games.length, 'games');
   res.json({ success: true, games });
 });
 
@@ -189,26 +190,34 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ============ STATIC FILES & SPA FALLBACK ============
+console.log('[STARTUP] Configuring static files...');
 const buildPath = path.join(__dirname, '..', 'frontend', 'build');
-try {
+const fs = require('fs');
+if (fs.existsSync(buildPath)) {
   app.use(express.static(buildPath));
-} catch (err) {
-  console.log('Frontend build not found at', buildPath, '- serving API only');
+  console.log('[STARTUP] Frontend build found at:', buildPath);
+} else {
+  console.log('[STARTUP] Frontend build not found at', buildPath, '- API only mode');
 }
+
+// 404 handler for missing API routes
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ success: false, message: 'API endpoint not found', path: req.path, method: req.method });
+});
 
 // SPA fallback - the React app handles all routes (including /admin, /play/gta-vc)
 // Only serve index.html for non-API routes
 app.get('*', (req, res) => {
-  // Don't serve SPA for API routes
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ success: false, message: 'API route not found' });
-  }
-
+  console.log('[DEBUG] SPA fallback for:', req.path);
   try {
     const indexPath = path.join(buildPath, 'index.html');
-    res.sendFile(indexPath);
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ success: false, message: 'Frontend not built' });
+    }
   } catch (err) {
-    res.status(404).json({ success: false, message: 'Page not found' });
+    res.status(404).json({ success: false, message: 'Page not found', error: err.message });
   }
 });
 
