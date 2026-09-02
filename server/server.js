@@ -1,5 +1,19 @@
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '..', 'config', '.env') });
+const fs = require('fs');
+
+// Try to load .env from config folder (local), fallback to root .env (Render)
+const envPath1 = path.join(__dirname, '..', 'config', '.env');
+const envPath2 = path.join(__dirname, '..', '.env');
+const envPathToUse = fs.existsSync(envPath1) ? envPath1 : (fs.existsSync(envPath2) ? envPath2 : null);
+
+if (envPathToUse) {
+  require('dotenv').config({ path: envPathToUse });
+  console.log(`[INFO] Loaded .env from: ${envPathToUse}`);
+} else {
+  console.log('[INFO] No .env file found, using environment variables');
+  require('dotenv').config();
+}
+
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -23,9 +37,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
 
 // ============ API ENDPOINTS (must be before static files) ============
+console.log('[STARTUP] Registering API endpoints...');
 
 // Admin Login
 app.post('/api/admin/login', (req, res) => {
+  console.log('[DEBUG] POST /api/admin/login called');
   const { username, password } = req.body;
 
   if (!username || !password) {
@@ -198,7 +214,33 @@ app.get('*', (req, res) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ success: true, message: 'Server is running', timestamp: new Date().toISOString() });
+  res.json({
+    success: true,
+    message: 'Server is running',
+    routes: [
+      'POST /api/admin/login',
+      'GET /api/admin/games',
+      'POST /api/admin/games/add',
+      'DELETE /api/admin/games/:id',
+      'GET /api/games/list',
+      'POST /api/session',
+      'GET /api/downloads',
+      'GET /api/admin/stats',
+      'POST /api/logout'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Debug endpoint
+app.get('/debug', (req, res) => {
+  res.json({
+    env: process.env.NODE_ENV,
+    port: PORT,
+    adminUsername: process.env.ADMIN_USERNAME || 'admin',
+    hasMongoDb: !!process.env.MONGODB_URI,
+    hasCloudinary: !!process.env.CLOUDINARY_API_KEY
+  });
 });
 
 app.listen(PORT, () => {
