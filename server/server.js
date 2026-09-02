@@ -173,17 +173,41 @@ app.post('/api/logout', (req, res) => {
 });
 
 // ============ STATIC FILES & SPA FALLBACK ============
-app.use(express.static(path.join(__dirname, 'frontend', 'build')));
+const buildPath = path.join(__dirname, '..', 'frontend', 'build');
+try {
+  app.use(express.static(buildPath));
+} catch (err) {
+  console.log('Frontend build not found at', buildPath, '- serving API only');
+}
 
 // SPA fallback - the React app handles all routes (including /admin, /play/gta-vc)
+// Only serve index.html for non-API routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
+  // Don't serve SPA for API routes
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ success: false, message: 'API route not found' });
+  }
+
+  try {
+    const indexPath = path.join(buildPath, 'index.html');
+    res.sendFile(indexPath);
+  } catch (err) {
+    res.status(404).json({ success: false, message: 'Page not found' });
+  }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ success: true, message: 'Server is running', timestamp: new Date().toISOString() });
 });
 
 app.listen(PORT, () => {
   console.log(`\n🎮 SPVB Platform Server running at http://localhost:${PORT}`);
+  console.log(`📍 Health: http://localhost:${PORT}/health`);
   console.log(`📍 API: http://localhost:${PORT}/api`);
+  console.log(`📍 Admin Login: POST http://localhost:${PORT}/api/admin/login`);
   console.log(`📍 Home: http://localhost:${PORT}`);
   console.log(`🕹️  Admin: http://localhost:${PORT}/admin`);
-  console.log(`🎮 Games: http://localhost:${PORT}/play\n`);
+  console.log(`🎮 Games: http://localhost:${PORT}/play`);
+  console.log(`📊 Stats: http://localhost:${PORT}/api/admin/stats\n`);
 });
