@@ -70,3 +70,23 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Build directories
+build/
+frontend/build/
+dist/
+
+# Development
+.claude/
+.env.development
+.env.staging
+.env.production
+
+# System files
+package-lock.json
+yarn.lock
+
+# Certificates (if any)
+*.pem
+*.key
+*.crt

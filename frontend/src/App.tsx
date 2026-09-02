@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
 import { AdHeader, AdSidebar, AdInline, AdMobile, AdGameBanner } from './Ads';
+import AdminLogin from './AdminLogin';
+import AdminPanel from './AdminPanel';
+import GamesList from './GamesList';
 
 // TEMPORARILY DISABLED FOR GOOGLE ADSENSE APPROVAL
 // Set to true to re-enable third-party ad network (highrevenueformat + profitableratecpmnetwork)
@@ -88,7 +91,7 @@ function useToasts() {
 }
 
 function App() {
-  const apiUrl = process.env.REACT_APP_API_URL || 'https://spvb-download-backend.onrender.com';
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
   const { toasts, push } = useToasts();
 
   const [sessionId, setSessionId] = useState<string>('');
@@ -113,15 +116,22 @@ function App() {
 
   const createSession = useCallback(async () => {
     try {
-      const res = await apiCall(`${apiUrl}/api/session`);
+      console.log('[DEBUG] Creating session with API URL:', apiUrl);
+      const res = await apiCall(`${apiUrl}/api/session`, { method: 'POST' });
       const data = await res.json();
+      console.log('[DEBUG] Session response:', data);
       if (data.success) {
         setSessionId(data.session_id);
         localStorage.setItem('spvb_session_id', data.session_id);
         push('✅ Session created');
+        console.log('[DEBUG] Session ID saved:', data.session_id);
+      } else {
+        push(`❌ Session failed: ${data.message || 'Unknown error'}`, 'error');
+        console.error('[DEBUG] Session error:', data);
       }
     } catch (error) {
       push(`❌ Session failed: ${error}`, 'error');
+      console.error('[DEBUG] Session exception:', error);
     }
   }, [apiUrl, push]);
 
@@ -218,8 +228,12 @@ function App() {
   }, []);
 
   const fetchMetadata = async () => {
-    if (!url || !sessionId) {
+    if (!url) {
       push('❌ Please enter a URL', 'error');
+      return;
+    }
+    if (!sessionId) {
+      push('⏳ Creating session... Please try again', 'error');
       return;
     }
     if (metadataCacheRef.current[url]) {
@@ -412,8 +426,36 @@ const manualDownload = useCallback(async () => {
   }[validation || ''] || null;
 
   const [showGame, setShowGame] = useState(false);
+  const [adminToken, setAdminToken] = useState(localStorage.getItem('admin_token') || null);
 
-  const isGameRoute = window.location.pathname.startsWith('/play/');
+  const pathname = window.location.pathname;
+  const isAdminRoute = pathname.startsWith('/admin');
+  const isGameRoute = pathname.startsWith('/play/');
+  const isGamesListRoute = pathname === '/play';
+
+  // Admin route
+  if (isAdminRoute) {
+    if (!adminToken) {
+      return <AdminLogin onLogin={(token) => {
+        setAdminToken(token);
+        localStorage.setItem('admin_token', token);
+      }} />;
+    }
+    return <AdminPanel token={adminToken} onLogout={() => {
+      setAdminToken(null);
+      localStorage.removeItem('admin_token');
+      window.location.href = '/';
+    }} />;
+  }
+
+  // Games list route
+  if (isGamesListRoute) {
+    return <GamesList onSelectGame={(game) => {
+      window.location.href = `/play/${game.id}`;
+    }} />;
+  }
+
+  // Game detail route
   if (isGameRoute || showGame) {
     return <GamePage onClose={() => setShowGame(false)} />;
   }
@@ -429,16 +471,16 @@ const manualDownload = useCallback(async () => {
 
       <ToastStack toasts={toasts} />
 
-      <div style={{ position: 'relative', zIndex: 2 }}>
+      <div style={{ position: 'relative', zIndex: 2, background: 'transparent' }}>
         <header className="header">
           <div className="logo-section">
             <img src="logo.png" alt="SPVB" className="logo-img" />
             <span className="logo-text">SPVB</span>
           </div>
           <nav>
-            <button onClick={() => setShowGame(true)} className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
+            <a href="/play" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
               <span>🎮</span> Games
-            </button>
+            </a>
             <button className="nav-btn">
               <span>?</span> How it works
             </button>
@@ -457,9 +499,7 @@ const manualDownload = useCallback(async () => {
           <LivePlayers />
         </section>
 
-        {sessionId && (
-          <>
-          <section className="main-content">
+        <section className="main-content">
             <div className="content-layout">
             <div className="content-main">
 
@@ -514,9 +554,7 @@ const manualDownload = useCallback(async () => {
               </aside>
             )}
             </div>
-          </section>
-          </>
-        )}
+        </section>
 
         <Features />
         <ScrollingNotice />
@@ -529,13 +567,28 @@ const manualDownload = useCallback(async () => {
 
 
 function LivePlayers() {
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
   const [count, setCount] = useState(5000);
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setCount(c => c + 1 + Math.floor(Math.random() * 3));
-    }, 2000 + Math.random() * 3000);
-    return () => clearInterval(timer);
-  }, []);
+    const fetchPlayerCount = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/admin/stats`);
+        const data = await res.json();
+        if (data.success) {
+          const realUsers = data.stats.totalUsers || 0;
+          setCount(5000 + realUsers);
+        }
+      } catch (error) {
+        setCount(5000);
+      }
+    };
+
+    fetchPlayerCount();
+    const interval = setInterval(fetchPlayerCount, 5000);
+    return () => clearInterval(interval);
+  }, [apiUrl]);
+
   return (
     <div className="hero-live-players">
       <span className="live-dot"></span>
@@ -732,21 +785,122 @@ function Features() {
 }
 
 function Footer() {
+  const [modal, setModal] = useState<'privacy' | 'terms' | 'contact' | null>(null);
+
   return (
-    <footer className="footer">
-      <p>🔒 Session-based · Temporary processing · Auto cleanup · No login required</p>
-      <p>
-        © 2026 SPVB Downloader. All rights reserved. ·
-        <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Privacy Policy</button> ·
-        <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Terms of Service</button> ·
-        <button onClick={() => {}} style={{ background: 'none', border: 'none', color: '#93c5fd', cursor: 'pointer', textDecoration: 'underline' }}>Contact Us</button>
-      </p>
-    </footer>
+    <>
+      <footer className="footer">
+        <div className="footer-content">
+          <p className="footer-info">🔒 Session-based · Temporary processing · Auto cleanup · No login required</p>
+          <div className="footer-links">
+            <p>© 2026 SPVB Downloader. All rights reserved.</p>
+            <div className="footer-buttons">
+              <button onClick={() => setModal('privacy')} className="footer-link">Privacy Policy</button>
+              <span className="separator">·</span>
+              <button onClick={() => setModal('terms')} className="footer-link">Terms of Service</button>
+              <span className="separator">·</span>
+              <button onClick={() => setModal('contact')} className="footer-link">Contact Us</button>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {modal && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+
+            {modal === 'privacy' && (
+              <div>
+                <h2>Privacy Policy</h2>
+                <div className="modal-body">
+                  <h3>1. Information We Collect</h3>
+                  <p>We collect session IDs and download history stored locally on your device. No personal data is stored on our servers.</p>
+
+                  <h3>2. How We Use Your Information</h3>
+                  <p>Session data is used to maintain your current session for up to 30 minutes. Download history is stored in your browser only.</p>
+
+                  <h3>3. Data Security</h3>
+                  <p>All communications are encrypted. We do not share any data with third parties.</p>
+
+                  <h3>4. Cookies</h3>
+                  <p>We use browser storage (localStorage) to save your session ID and download history. You can clear this anytime in browser settings.</p>
+
+                  <h3>5. Contact Us</h3>
+                  <p>For privacy concerns, please use our Contact Us form below.</p>
+                </div>
+              </div>
+            )}
+
+            {modal === 'terms' && (
+              <div>
+                <h2>Terms of Service</h2>
+                <div className="modal-body">
+                  <h3>1. Acceptance of Terms</h3>
+                  <p>By using SPVB Downloader, you agree to these terms and conditions. If you do not agree, please do not use our service.</p>
+
+                  <h3>2. Permitted Use</h3>
+                  <p>You may use this service for personal, non-commercial purposes only. Downloading copyrighted content without permission is prohibited.</p>
+
+                  <h3>3. User Responsibilities</h3>
+                  <p>You are responsible for ensuring that your use of our service complies with all applicable laws and regulations in your jurisdiction.</p>
+
+                  <h3>4. Disclaimer</h3>
+                  <p>This service is provided "as is" without warranties. We are not liable for any damages resulting from use or inability to use the service.</p>
+
+                  <h3>5. Termination</h3>
+                  <p>We reserve the right to terminate or restrict access to our service at any time.</p>
+
+                  <h3>6. Changes to Terms</h3>
+                  <p>We may update these terms at any time. Continued use constitutes acceptance of updated terms.</p>
+                </div>
+              </div>
+            )}
+
+            {modal === 'contact' && (
+              <div>
+                <h2>Contact Us - Educational Project</h2>
+                <div className="modal-body">
+                  <h3>Report Copyright or Issues</h3>
+                  <p>This is an educational project. If you have any concerns about copyright or third-party content, please contact us immediately.</p>
+
+                  <div className="contact-section">
+                    <h4>📧 Primary Contact Email</h4>
+                    <p><a href="mailto:vinaymail1820@gmail.com">vinaymail1820@gmail.com</a></p>
+                  </div>
+
+                  <div className="contact-section">
+                    <h4>ℹ️ Project Information</h4>
+                    <p>This is an <strong>Educational Initiative</strong> created for learning purposes only. We do not store any data on our servers. All game content is hosted on third-party servers.</p>
+                  </div>
+
+                  <div className="contact-section">
+                    <h4>⚖️ Copyright Claims</h4>
+                    <p>If you believe we are hosting copyrighted content without permission, please email us with:</p>
+                    <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+                      <li>Description of the copyrighted content</li>
+                      <li>Your ownership proof</li>
+                      <li>Specific URL(s) in question</li>
+                    </ul>
+                  </div>
+
+                  <div className="contact-section">
+                    <h4>⏱️ Response Time</h4>
+                    <p>We respond to copyright claims and inquiries within 24 hours.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 function GamePage({ onClose }: { onClose?: () => void } = {}) {
   const [gameUrl, setGameUrl] = useState('');
+  const [gameName, setGameName] = useState('Game');
   const [count, setCount] = useState(5000);
   const [loaded, setLoaded] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -754,11 +908,30 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   useEffect(() => {
     const fetchGameUrl = async () => {
       try {
-        const response = await fetch('/config.json');
+        const pathname = window.location.pathname;
+        const gameId = pathname.split('/play/')[1];
+
+        if (!gameId) {
+          setGameUrl('');
+          return;
+        }
+
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+        const response = await fetch(`${apiUrl}/api/games/list`);
         const data = await response.json();
-        setGameUrl(data.gameUrl || '');
+
+        if (data.success && data.games) {
+          const game = data.games.find((g: any) => g.id === gameId);
+          if (game) {
+            setGameUrl(game.url);
+            setGameName(game.name);
+          } else {
+            console.error('Game not found');
+            setGameUrl('');
+          }
+        }
       } catch (err) {
-        console.error('Failed to fetch game config:', err);
+        console.error('Failed to fetch game:', err);
         setGameUrl('');
       }
     };
@@ -766,8 +939,24 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => setCount(c => c + 1 + Math.floor(Math.random() * 3)), 2000 + Math.random() * 3000);
-    return () => clearInterval(timer);
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+
+    const fetchPlayerCount = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/admin/stats`);
+        const data = await res.json();
+        if (data.success) {
+          const realUsers = data.stats.totalUsers || 0;
+          setCount(5000 + realUsers);
+        }
+      } catch (error) {
+        setCount(5000);
+      }
+    };
+
+    fetchPlayerCount();
+    const interval = setInterval(fetchPlayerCount, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -804,19 +993,13 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const closeGame = () => {
-    if (window.confirm('Close game and return to home?')) {
-      if (onClose) {
-        onClose();
-      } else {
-        window.location.href = '/';
-      }
-    }
+    window.location.href = '/play';
   };
 
   return (
     <div className="game-page">
       <div className="game-header">
-        <h1>Grand Theft Auto: Vice City</h1>
+        <h1>{gameName}</h1>
         <div className="game-player-count">
           <span className="live-dot"></span>
           <strong>{count.toLocaleString('en-US')}</strong> Playing
@@ -849,7 +1032,7 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
             <div className="coming-soon-icon">🚧</div>
             <h2>Coming Soon</h2>
             <p>This game is not available yet. Please check back later.</p>
-            <a href="/" className="game-btn light">🏠 Back to Home</a>
+            <a href="/play" className="game-btn light">🎮 Back to Games</a>
           </div>
         )}
       </div>
