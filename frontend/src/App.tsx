@@ -516,9 +516,6 @@ const manualDownload = useCallback(async () => {
           <LivePlayers />
         </section>
 
-        {/* Top Header Ads */}
-        {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdHeader />}
-
         <section className="main-content">
             <div className="content-layout">
             {/* Left Main Content */}
@@ -566,24 +563,13 @@ const manualDownload = useCallback(async () => {
             ) : (
               <HistorySection history={history} onRedownload={redownloadFromHistory} onDelete={deleteFromHistory} />
             )}
-
-            {/* Inline Ads Below Content */}
-            {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdInline />}
             </div>
-
-            {/* Right Sidebar Ads */}
-            {shouldShowAds && SHOW_THIRD_PARTY_ADS && (
-              <aside className="content-sidebar">
-                <AdSidebar />
-              </aside>
-            )}
             </div>
         </section>
 
         <Features />
         <ScrollingNotice />
         <Footer />
-        {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdMobile />}
       </div>
     </div>
   );
