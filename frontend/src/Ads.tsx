@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useEffect } from 'react';
 import { AdPlaceholder } from './AdPlaceholder';
 
 function CloseableAd({ children }: { children: React.ReactNode }) {
@@ -33,14 +34,12 @@ const AdContainer = ({
   atOptionsKey?: string,
   invokeScript: string
 }) => {
-  const [scriptLoaded, setScriptLoaded] = useState(false);
-
   useEffect(() => {
     // Set timeout to show placeholder if script doesn't load
     const timeout = setTimeout(() => {
       const container = document.getElementById(`ad-${key}`);
       if (container && container.innerHTML.trim() === '') {
-        setScriptLoaded(false);
+        // Placeholder already visible
       }
     }, 3000);
 
@@ -49,8 +48,6 @@ const AdContainer = ({
     script.src = invokeScript;
     script.async = true;
     script.defer = true;
-    script.onload = () => setScriptLoaded(true);
-    script.onerror = () => setScriptLoaded(false);
 
     const container = document.getElementById(`ad-${key}`);
     if (container) {
