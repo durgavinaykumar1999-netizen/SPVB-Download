@@ -476,8 +476,9 @@ const manualDownload = useCallback(async () => {
     return <MoviePage onClose={() => {}} />;
   }
 
-  const hasContent = sessionId && (metadata || history.length > 0);
-  const shouldShowAds = hasContent;
+  // Show ads on all pages with proper content
+  // Ads appear on: home, download results, games, movies, history
+  const shouldShowAds = true;
 
   return (
     <div className="app">
