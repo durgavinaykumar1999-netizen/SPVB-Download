@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import AdUnit from './AdUnit';
 
+// DISABLED - Google AdSense policy violation
+// All third-party ad networks disabled: highrevenueformat, profitableratecpmnetwork
+// Re-enable after Google approves the site
+
 function CloseableAd({ children }: { children: React.ReactNode }) {
   const [hidden, setHidden] = useState(false);
   if (hidden) return null;
@@ -136,38 +140,12 @@ const prn3 = (
   />
 );
 
-export const AdHeader = () => (
-  <div className="ads-row ads-top">
-    <CloseableAd>{header728}</CloseableAd>
-    <CloseableAd>{header468}</CloseableAd>
-    <CloseableAd>{prn1}</CloseableAd>
-  </div>
-);
+export const AdHeader = () => null;
 
-export const AdSidebar = () => (
-  <div className="ads-sidebar">
-    <CloseableAd>{sidebar160}</CloseableAd>
-    <CloseableAd>{sidebar600}</CloseableAd>
-    <CloseableAd>{prn3}</CloseableAd>
-  </div>
-);
+export const AdSidebar = () => null;
 
-export const AdInline = () => (
-  <div className="ads-row ads-inline">
-    <CloseableAd>{inline300}</CloseableAd>
-    <CloseableAd>{prn2}</CloseableAd>
-  </div>
-);
+export const AdInline = () => null;
 
-export const AdMobile = () => (
-  <div className="ads-mobile">
-    <CloseableAd>{mobile50}</CloseableAd>
-  </div>
-);
+export const AdMobile = () => null;
 
-export const AdGameBanner = () => (
-  <div className="game-ad-banner">
-    <CloseableAd>{header728}</CloseableAd>
-    <CloseableAd>{header468}</CloseableAd>
-  </div>
-);
+export const AdGameBanner = () => null;

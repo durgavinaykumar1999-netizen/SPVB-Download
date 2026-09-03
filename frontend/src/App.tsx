@@ -5,10 +5,12 @@ import { AdHeader, AdSidebar, AdInline, AdMobile, AdGameBanner } from './Ads';
 import AdminLogin from './AdminLogin';
 import AdminPanel from './AdminPanel';
 import GamesList from './GamesList';
+import MoviesList from './MoviesList';
+import MoviePage from './MoviePage';
 
-// TEMPORARILY DISABLED FOR GOOGLE ADSENSE APPROVAL
-// Set to true to re-enable third-party ad network (highrevenueformat + profitableratecpmnetwork)
-// If Google approves with only Google AdSense, keep as false
+// DISABLED - Google AdSense policy: ads only on pages with real publisher content
+// Do NOT enable third-party ad networks (highrevenueformat, profitableratecpmnetwork)
+// Google AdSense only shows on download results pages when metadata is present
 const SHOW_THIRD_PARTY_ADS = false;
 
 interface Quality {
@@ -432,6 +434,8 @@ const manualDownload = useCallback(async () => {
   const isAdminRoute = pathname.startsWith('/admin');
   const isGameRoute = pathname.startsWith('/play/');
   const isGamesListRoute = pathname === '/play';
+  const isMovieRoute = pathname.startsWith('/watch/');
+  const isMoviesListRoute = pathname === '/watch';
 
   // Admin route
   if (isAdminRoute) {
@@ -460,6 +464,18 @@ const manualDownload = useCallback(async () => {
     return <GamePage onClose={() => setShowGame(false)} />;
   }
 
+  // Movies list route
+  if (isMoviesListRoute) {
+    return <MoviesList onSelectMovie={(movie) => {
+      window.location.href = `/watch/${movie.id}`;
+    }} />;
+  }
+
+  // Movie detail route
+  if (isMovieRoute) {
+    return <MoviePage onClose={() => {}} />;
+  }
+
   const hasContent = sessionId && (metadata || history.length > 0);
   const shouldShowAds = hasContent;
 
@@ -480,6 +496,9 @@ const manualDownload = useCallback(async () => {
           <nav>
             <a href="/play" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
               <span>🎮</span> Games
+            </a>
+            <a href="/watch" className="nav-btn movies-btn" style={{ textDecoration: 'none' }}>
+              <span>🎬</span> Movies
             </a>
             <button className="nav-btn">
               <span>?</span> How it works
