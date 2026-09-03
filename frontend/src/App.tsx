@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
-import { SmallBannerAd, MobileBannerAd, AdGameBanner } from './Ads';
+import { AdGameBanner } from './Ads';
 import AdminLogin from './AdminLogin';
 import AdminPanel from './AdminPanel';
 import GamesList from './GamesList';
