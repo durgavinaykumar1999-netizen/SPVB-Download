@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useEffect } from 'react';
 import { AdPlaceholder } from './AdPlaceholder';
 
 function CloseableAd({ children }: { children: React.ReactNode }) {
