@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './GamesList.css';
 import ScrollingNotice from './ScrollingNotice';
+import { SmallBannerAd, MobileBannerAd } from './Ads';
 
 interface Game {
   id: string;
@@ -71,6 +72,7 @@ export default function GamesList({ onSelectGame }: GamesListProps) {
   return (
     <div className="games-list-wrapper">
       <ScrollingNotice educationMode={true} />
+      <SmallBannerAd />
       <div className="games-list-container">
         <div className="games-list-header">
           <h1>🎮 Play Games</h1>
@@ -104,6 +106,7 @@ export default function GamesList({ onSelectGame }: GamesListProps) {
         ))}
       </div>
       </div>
+      <MobileBannerAd />
     </div>
   );
 }

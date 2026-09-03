@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './MoviesList.css';
 import ScrollingNotice from './ScrollingNotice';
+import { SmallBannerAd, MobileBannerAd } from './Ads';
 
 interface Movie {
   id: string;
@@ -71,6 +72,7 @@ export default function MoviesList({ onSelectMovie }: MoviesListProps) {
   return (
     <div className="movies-list-wrapper">
       <ScrollingNotice educationMode={true} />
+      <SmallBannerAd />
       <div className="movies-list-container">
         <div className="movies-list-header">
           <h1>🎬 Watch Movies</h1>
@@ -104,6 +106,7 @@ export default function MoviesList({ onSelectMovie }: MoviesListProps) {
         ))}
       </div>
       </div>
+      <MobileBannerAd />
     </div>
   );
 }

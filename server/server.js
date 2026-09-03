@@ -30,7 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 const games = [];
 const movies = [];
 const adminUsers = new Map([
-  [process.env.ADMIN_USERNAME || 'admin', { password: process.env.ADMIN_PASSWORD || 'admin123' }]
+  [process.env.ADMIN_USERNAME || 'admin', { password: process.env.ADMIN_PASSWORD || 'admin2026' }]
 ]);
 const sessions = new Map();
 const userStats = new Map();

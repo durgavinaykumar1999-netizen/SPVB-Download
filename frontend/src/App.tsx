@@ -476,8 +476,8 @@ const manualDownload = useCallback(async () => {
     return <MoviePage onClose={() => {}} />;
   }
 
-  // Ads disabled - will be re-enabled when proper ad provider is configured
-  const shouldShowAds = false;
+  // Show ads on all pages for testing
+  const shouldShowAds = true;
 
   return (
     <div className="app">
@@ -507,8 +507,6 @@ const manualDownload = useCallback(async () => {
           </nav>
         </header>
 
-        {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdHeader />}
-
         <section className="hero-section">
           <h1>
             <span className="gradient-text">SPVB</span> Downloader
@@ -518,8 +516,12 @@ const manualDownload = useCallback(async () => {
           <LivePlayers />
         </section>
 
+        {/* Top Header Ads */}
+        {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdHeader />}
+
         <section className="main-content">
             <div className="content-layout">
+            {/* Left Main Content */}
             <div className="content-main">
 
             <div className="tabs-container">
@@ -565,8 +567,11 @@ const manualDownload = useCallback(async () => {
               <HistorySection history={history} onRedownload={redownloadFromHistory} onDelete={deleteFromHistory} />
             )}
 
+            {/* Inline Ads Below Content */}
             {shouldShowAds && SHOW_THIRD_PARTY_ADS && <AdInline />}
             </div>
+
+            {/* Right Sidebar Ads */}
             {shouldShowAds && SHOW_THIRD_PARTY_ADS && (
               <aside className="content-sidebar">
                 <AdSidebar />

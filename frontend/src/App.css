@@ -1888,41 +1888,49 @@ main, article {
   min-height: 100px;
 }
 
-/* Header Ads */
+/* Header Ads - Below Navigation */
 .ads-header {
   width: 100%;
-  margin: 16px 0 24px 0;
+  margin: 12px 0 20px 0;
   padding: 12px 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   justify-content: center;
   align-items: center;
   background: transparent;
+  position: relative;
+  z-index: 3;
 }
 
 .ads-header .ad-close-wrap {
   width: 100%;
-  max-width: 800px;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
-/* Inline Ads */
+/* Inline Ads - Between Content Sections */
 .ads-inline {
   width: 100%;
-  margin: 24px 0;
+  margin: 28px 0;
   padding: 16px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-top: none;
+  border-bottom: none;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 16px;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
+  background: transparent;
 }
 
 .ads-inline .ad-close-wrap {
-  width: 100%;
-  max-width: 400px;
+  width: auto;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 /* Sidebar Ads */
@@ -1978,12 +1986,12 @@ main, article {
 .ad-close-wrap {
   position: relative;
   display: block;
-  z-index: 6;
-  margin: 12px 0;
+  z-index: 10;
+  margin: 12px auto;
   padding: 8px;
-  background: rgba(245, 245, 245, 0.5);
+  background: transparent;
   border-radius: 8px;
-  border: 1px solid #e0e0e0;
+  border: none;
 }
 
 .ad-close-btn {
