@@ -8,10 +8,10 @@ import GamesList from './GamesList';
 import MoviesList from './MoviesList';
 import MoviePage from './MoviePage';
 
-// DISABLED - Google AdSense policy: ads only on pages with real publisher content
-// Do NOT enable third-party ad networks (highrevenueformat, profitableratecpmnetwork)
-// Google AdSense only shows on download results pages when metadata is present
-const SHOW_THIRD_PARTY_ADS = false;
+// Ad Networks: Highrevenueformat + Profitableratecpmnetwork
+// All ads are clickable (opens in new tab on click)
+// Ads show on download results pages (when metadata present) and history pages
+const SHOW_THIRD_PARTY_ADS = true;
 
 interface Quality {
   label: string;

@@ -66,12 +66,16 @@
         });
       })();
     </script>
-    <!-- Google AdSense -->
-    <!-- DISABLED: Policy violation - "Google-served ads on screens without publisher-content" -->
-    <!-- Re-enable after Google approves updated site (only ads on download results pages) -->
-    <!-- <meta name="google-adsense-account" content="ca-pub-3576739218613107" />
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-3576739218613107"
-       crossorigin="anonymous"></script> -->
+    <!-- Ad Networks: Highrevenueformat + Profitableratecpmnetwork -->
+    <!-- All ads are clickable and open in new tab -->
+    <script>
+      window.addEventListener('click', function(e) {
+        if (e.target.closest('[data-ad-link]')) {
+          const link = e.target.closest('[data-ad-link]').getAttribute('data-ad-link');
+          if (link) window.open(link, '_blank');
+        }
+      }, true);
+    </script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

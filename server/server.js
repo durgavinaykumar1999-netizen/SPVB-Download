@@ -28,6 +28,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // In-memory storage (for development - replace with database in production)
 const games = [];
+const movies = [];
 const adminUsers = new Map([
   [process.env.ADMIN_USERNAME || 'admin', { password: process.env.ADMIN_PASSWORD || 'admin123' }]
 ]);
@@ -130,6 +131,53 @@ app.get('/api/games/list', (req, res) => {
   res.json({ success: true, games });
 });
 
+// ============ MOVIES ENDPOINTS ============
+
+// Add Movie
+app.post('/api/admin/movies/add', verifyAdminToken, (req, res) => {
+  const { name, url, thumbnail } = req.body;
+
+  if (!name || !url) {
+    return res.json({ success: false, message: 'Name and URL required' });
+  }
+
+  const movieId = 'movie-' + Date.now();
+  const newMovie = {
+    id: movieId,
+    name,
+    url,
+    thumbnail: thumbnail || '',
+    createdAt: new Date().toISOString(),
+    plays: 0
+  };
+
+  movies.push(newMovie);
+  res.json({ success: true, movieId, movie: newMovie });
+});
+
+// Get Admin Movies List
+app.get('/api/admin/movies', verifyAdminToken, (req, res) => {
+  res.json({ success: true, movies });
+});
+
+// Delete Movie
+app.delete('/api/admin/movies/:id', verifyAdminToken, (req, res) => {
+  const { id } = req.params;
+  const index = movies.findIndex(m => m.id === id);
+
+  if (index === -1) {
+    return res.json({ success: false, message: 'Movie not found' });
+  }
+
+  movies.splice(index, 1);
+  res.json({ success: true, message: 'Movie deleted' });
+});
+
+// Get Public Movies List
+app.get('/api/movies/list', (req, res) => {
+  res.json({ success: true, movies });
+});
+
 // Session Management
 app.post('/api/session', (req, res) => {
   const sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
@@ -183,6 +231,7 @@ app.get('/api/admin/stats', (req, res) => {
     success: true,
     stats: {
       totalGames: games.length,
+      totalMovies: movies.length,
       totalUsers,
       totalDownloads,
       totalPlays,
