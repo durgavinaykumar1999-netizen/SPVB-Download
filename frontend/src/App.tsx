@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
-import { AdHeader, AdSidebar, AdInline, AdMobile, AdGameBanner } from './Ads';
+import { SmallBannerAd, MobileBannerAd, AdGameBanner } from './Ads';
 import AdminLogin from './AdminLogin';
 import AdminPanel from './AdminPanel';
 import GamesList from './GamesList';
@@ -475,9 +475,6 @@ const manualDownload = useCallback(async () => {
   if (isMovieRoute) {
     return <MoviePage onClose={() => {}} />;
   }
-
-  // Show ads on all pages for testing
-  const shouldShowAds = true;
 
   return (
     <div className="app">
