@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AdPlaceholder } from './AdPlaceholder';
 
 function CloseableAd({ children }: { children: React.ReactNode }) {
   const [hidden, setHidden] = useState(false);
@@ -18,7 +19,7 @@ function CloseableAd({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Ad Container that loads scripts
+// Ad Container that loads scripts with fallback
 const AdContainer = ({
   key,
   height,
@@ -32,12 +33,24 @@ const AdContainer = ({
   atOptionsKey?: string,
   invokeScript: string
 }) => {
+  const [scriptLoaded, setScriptLoaded] = useState(false);
+
   useEffect(() => {
+    // Set timeout to show placeholder if script doesn't load
+    const timeout = setTimeout(() => {
+      const container = document.getElementById(`ad-${key}`);
+      if (container && container.innerHTML.trim() === '') {
+        setScriptLoaded(false);
+      }
+    }, 3000);
+
     // Load the ad script
     const script = document.createElement('script');
     script.src = invokeScript;
     script.async = true;
     script.defer = true;
+    script.onload = () => setScriptLoaded(true);
+    script.onerror = () => setScriptLoaded(false);
 
     const container = document.getElementById(`ad-${key}`);
     if (container) {
@@ -56,8 +69,13 @@ const AdContainer = ({
     }
 
     return () => {
+      clearTimeout(timeout);
       if (container && script.parentNode === container) {
-        container.removeChild(script);
+        try {
+          container.removeChild(script);
+        } catch (e) {
+          // Script already removed
+        }
       }
     };
   }, [key, height, width, atOptionsKey, invokeScript]);
@@ -75,13 +93,17 @@ const AdContainer = ({
         background: '#f5f5f5',
         border: '1px solid #ddd',
         borderRadius: '4px',
-        cursor: 'pointer'
+        cursor: 'pointer',
+        position: 'relative'
       }}
-    ></div>
+    >
+      {/* Placeholder will show if script doesn't load */}
+      <AdPlaceholder width={width} height={height} type="banner" />
+    </div>
   );
 };
 
-// Banner ads (clickable, opens in new tab)
+// Banner ads
 const BannerAd728 = () => (
   <AdContainer
     key="banner-728"
@@ -156,6 +178,7 @@ const PrnBannerAd = () => (
 
 const PrnInlineAd = () => (
   <div className="ad-container" id="ad-prn-inline" style={{ minHeight: '250px', cursor: 'pointer' }}>
+    <AdPlaceholder width={300} height={250} type="inline" />
     <script async data-cfasync="false" src="https://pl31124195.profitableratecpmnetwork.com/0221bc3a4d9d8690c9c87b8d892de725/invoke.js"></script>
   </div>
 );
