@@ -476,9 +476,8 @@ const manualDownload = useCallback(async () => {
     return <MoviePage onClose={() => {}} />;
   }
 
-  // Show ads on all pages with proper content
-  // Ads appear on: home, download results, games, movies, history
-  const shouldShowAds = true;
+  // Ads disabled - will be re-enabled when proper ad provider is configured
+  const shouldShowAds = false;
 
   return (
     <div className="app">
