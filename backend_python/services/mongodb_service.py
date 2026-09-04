@@ -36,6 +36,8 @@ class MongoDBService:
         self.db = None
         self.sessions = None
         self.downloads = None
+        self.games = None
+        self.movies = None
         self._connected = False
 
     def _ensure_connected(self):
@@ -47,6 +49,8 @@ class MongoDBService:
             self.db = self.client[config.mongodb_db_name]
             self.sessions = self.db["sessions"]
             self.downloads = self.db["downloads"]
+            self.games = self.db["games"]
+            self.movies = self.db["movies"]
             self._create_indexes()
             self._connected = True
             logger.info("MongoDB connected")

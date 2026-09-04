@@ -8,6 +8,7 @@ import os
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
 from ..services.cleanup_service import CleanupService
+from ..services.mongodb_service import MongoDBService
 from ..utils.logger import setup_logger
 from ..config.env import config
 
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api", tags=["public"])
 session_service = SessionService()
 download_service = DownloadService()
 cleanup_service = CleanupService()
+db = MongoDBService()
 
 class SessionRequest(BaseModel):
     pass
@@ -244,3 +246,31 @@ async def end_session(session_id: str = Query(...)):
     except Exception as e:
         logger.error(f"Session end error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+
+# ============ PUBLIC GAMES & MOVIES LIST ============
+
+@router.get("/games/list")
+async def get_games_list():
+    """Get public list of games"""
+    try:
+        db._ensure_connected()
+        games = list(db.games.find({}))
+        for game in games:
+            game.pop("_id", None)
+        return {"success": True, "games": games}
+    except Exception as e:
+        logger.error(f"Failed to fetch games: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch games: {str(e)}")
+
+@router.get("/movies/list")
+async def get_movies_list():
+    """Get public list of movies"""
+    try:
+        db._ensure_connected()
+        movies = list(db.movies.find({}))
+        for movie in movies:
+            movie.pop("_id", None)
+        return {"success": True, "movies": movies}
+    except Exception as e:
+        logger.error(f"Failed to fetch movies: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch movies: {str(e)}")

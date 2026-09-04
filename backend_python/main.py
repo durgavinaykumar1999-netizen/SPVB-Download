@@ -3,12 +3,14 @@ import logging
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from dotenv import load_dotenv
 
 from .config.env import config
 from .routes.public_routes import router as public_router
+from .routes.admin_routes import router as admin_router
 from .utils.logger import setup_logger
 from .services.cleanup_service import CleanupService
 
@@ -71,19 +73,50 @@ async def log_requests(request, call_next):
     logger.info(f"{request.method} {request.url.path} - {response.status_code}")
     return response
 
-# Include routes
-app.include_router(public_router)
+# Get absolute path to frontend build directory
+def get_frontend_path():
+    # Get the absolute path to the backend_python directory
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    # Go up to project root, then into frontend/build
+    project_root = os.path.dirname(backend_dir)
+    return os.path.join(project_root, "frontend", "build")
 
-# 404 handler
-@app.exception_handler(404)
-async def not_found_handler(request, exc):
+FRONTEND_PATH = get_frontend_path()
+logger.info(f"Frontend path: {FRONTEND_PATH}, exists: {os.path.exists(FRONTEND_PATH)}")
+
+# Include routes (must be BEFORE catch-all)
+app.include_router(public_router)
+app.include_router(admin_router)
+
+# Root path
+@app.get("/", name="root")
+async def serve_root():
+    """Serve React app root"""
+    index_path = os.path.join(FRONTEND_PATH, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path, media_type="text/html")
     return JSONResponse(
         status_code=404,
-        content={
-            "success": False,
-            "message": "Route not found",
-            "code": 404
-        }
+        content={"success": False, "message": f"Frontend not found at {FRONTEND_PATH}", "code": 404}
+    )
+
+# Catch-all route for serving React app (SPA fallback) - MUST BE LAST
+@app.get("/{full_path:path}", name="spa_fallback")
+async def serve_spa(full_path: str):
+    """Serve React app for all non-API routes"""
+    # Try to serve static file first
+    file_path = os.path.join(FRONTEND_PATH, full_path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+
+    # Fallback to index.html for SPA routing
+    index_path = os.path.join(FRONTEND_PATH, "index.html")
+    if os.path.isfile(index_path):
+        return FileResponse(index_path, media_type="text/html")
+
+    return JSONResponse(
+        status_code=404,
+        content={"success": False, "message": "Not found", "code": 404}
     )
 
 # Exception handler
