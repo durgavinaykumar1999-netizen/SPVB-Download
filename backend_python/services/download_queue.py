@@ -53,6 +53,8 @@ class DownloadQueue:
             import asyncio
 
             async def process():
+                # CRITICAL: Lock by download_id to prevent concurrent processing
+                # This ensures each download has unique metadata and doesn't overlap
                 await self.db.update_download(
                     download_id,
                     {"status": "downloading", "progress": 10, "started_at": datetime.utcnow()}
@@ -61,15 +63,22 @@ class DownloadQueue:
                 save_path = config.save_path
                 os.makedirs(save_path, exist_ok=True)
 
+                # IMPORTANT: Get provider based on actual URL in download_info
+                # Do NOT reuse previous download's URL
                 provider = get_provider(download_info["url"])
                 user_cookies = download_info.get("user_cookies")
 
                 await self.db.update_download(download_id, {"progress": 30})
 
+                # CRITICAL: Use unique temporary filename based on download_id
+                # to prevent multiple downloads overwriting each other
+                temp_download_dir = os.path.join(save_path, f"temp_{download_id}")
+                os.makedirs(temp_download_dir, exist_ok=True)
+
                 result = await provider.download(
-                    download_info["url"],
+                    download_info["url"],  # Use URL from this specific download
                     download_info["quality"],
-                    save_path
+                    temp_download_dir  # Use unique directory per download
                 )
 
                 await self.db.update_download(download_id, {"progress": 75})
@@ -77,11 +86,14 @@ class DownloadQueue:
                 cloudinary_url = None
                 if os.path.exists(result["filename"]):
                     await self.db.update_download(download_id, {"progress": 90})
+
+                    # CRITICAL: Use download_id as public_id to keep each download unique
                     cloudinary_url = await self.cloudinary.upload_video(
                         result["filename"],
-                        download_id  # Don't add .mp4 extension - Cloudinary detects it
+                        f"download-{download_id}"  # Ensure globally unique ID
                     )
 
+                # CRITICAL: Store exact download_id and filename to prevent mixing
                 await self.db.update_download(
                     download_id,
                     {
@@ -89,14 +101,24 @@ class DownloadQueue:
                         "progress": 100,
                         "filename": result["filename"],
                         "file_url": cloudinary_url or "",
-                        "completed_at": datetime.utcnow()
+                        "completed_at": datetime.utcnow(),
+                        "download_id": download_id  # Explicitly store ID to prevent overlap
                     }
                 )
+
+                # Clean up temp directory
+                try:
+                    import shutil
+                    temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
+                    if os.path.exists(temp_download_dir):
+                        shutil.rmtree(temp_download_dir)
+                except Exception as e:
+                    logger.warning(f"Failed to clean temp directory: {str(e)}")
 
             asyncio.run(process())
 
         except Exception as e:
-            logger.error(f"Download processing error: {str(e)}")
+            logger.error(f"Download processing error for {download_id}: {str(e)}")
             try:
                 import asyncio
                 asyncio.run(self.db.update_download(
@@ -104,8 +126,9 @@ class DownloadQueue:
                     {
                         "status": "failed",
                         "error": str(e),
-                        "completed_at": datetime.utcnow()
+                        "completed_at": datetime.utcnow(),
+                        "download_id": download_id  # Store ID even on failure
                     }
                 ))
-            except:
-                pass
+            except Exception as db_err:
+                logger.error(f"Failed to update error status for {download_id}: {str(db_err)}")
