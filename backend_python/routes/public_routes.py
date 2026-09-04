@@ -94,19 +94,6 @@ async def start_download(request: DownloadRequest):
         logger.error(f"Download queue error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/download/{download_id}")
-async def get_download_status(download_id: str, session_id: str = Query(...)):
-    try:
-        download = await download_service.get_download_status(download_id, session_id)
-
-        return {
-            "success": True,
-            "download": download
-        }
-    except Exception as e:
-        logger.error(f"Download status error: {str(e)}")
-        raise HTTPException(status_code=404, detail=str(e))
-
 @router.get("/downloads")
 async def list_downloads(session_id: str = Query(...)):
     try:
@@ -120,18 +107,53 @@ async def list_downloads(session_id: str = Query(...)):
         logger.error(f"Downloads list error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/download/{download_id}/file")
-async def download_file(download_id: str, session_id: str = Query(...)):
-    try:
-        file_path = await download_service.get_download_file(download_id, session_id)
+# NOTE: These routes MUST come BEFORE the generic /download/{id} route
+# FastAPI matches path parameters greedily, so /download/auto-download could match /{id}
+# Register with explicit route paths to ensure proper matching
 
-        return {
-            "success": True,
-            "file_url": file_path
-        }
+@router.get("/download/auto-download")
+async def auto_download_file_alt(download_id: str = Query(...), session_id: str = Query(...)):
+    """Fallback endpoint for auto-download with query params"""
+    try:
+        logger.info(f"Auto-download request (alt): {download_id}")
+
+        download = await download_service.get_download_status(download_id, session_id)
+        logger.info(f"Download record retrieved: status={download.get('status')}")
+
+        if download["status"] != "completed":
+            error_msg = f"Download not completed: {download['status']}"
+            logger.warning(error_msg)
+            raise ValueError(error_msg)
+
+        file_path = download.get("filename")
+        logger.info(f"File path from DB: {file_path}")
+
+        if not file_path:
+            raise ValueError("No filename stored in database")
+
+        if not os.path.exists(file_path):
+            logger.error(f"File does not exist at path: {file_path}")
+            raise ValueError(f"File not found at: {file_path}")
+
+        file_size = os.path.getsize(file_path)
+        filename = os.path.basename(file_path)
+
+        logger.info(f"Serving file: {filename} ({file_size / (1024*1024):.2f} MB)")
+
+        return FileResponse(
+            path=file_path,
+            filename=filename,
+            media_type='video/mp4',
+            headers={"Content-Disposition": f"attachment; filename=\"{filename}\""}
+        )
     except Exception as e:
-        logger.error(f"Download file error: {str(e)}")
+        logger.error(f"Auto download error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/download/{download_id}/auto-download")
+async def auto_download_file(download_id: str, session_id: str = Query(...)):
+    """Primary endpoint for auto-download with path param"""
+    return await auto_download_file_alt(download_id, session_id)
 
 @router.get("/download/{download_id}/stream")
 async def stream_download(download_id: str, session_id: str = Query(...)):
@@ -161,6 +183,32 @@ async def stream_download(download_id: str, session_id: str = Query(...)):
     except Exception as e:
         logger.error(f"Stream download error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/download/{download_id}/file")
+async def download_file(download_id: str, session_id: str = Query(...)):
+    try:
+        file_path = await download_service.get_download_file(download_id, session_id)
+
+        return {
+            "success": True,
+            "file_url": file_path
+        }
+    except Exception as e:
+        logger.error(f"Download file error: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+
+@router.get("/download/{download_id}", name="get_download_status")
+async def get_download_status(download_id: str, session_id: str = Query(...)):
+    try:
+        download = await download_service.get_download_status(download_id, session_id)
+
+        return {
+            "success": True,
+            "download": download
+        }
+    except Exception as e:
+        logger.error(f"Download status error: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.post("/session/save-path")
 async def set_save_path(request: SavePathRequest):
@@ -196,42 +244,3 @@ async def end_session(session_id: str = Query(...)):
     except Exception as e:
         logger.error(f"Session end error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/download/{download_id}/auto-download")
-async def auto_download_file(download_id: str, session_id: str = Query(...)):
-    try:
-        logger.info(f"Auto-download request: {download_id}")
-
-        download = await download_service.get_download_status(download_id, session_id)
-        logger.info(f"Download record retrieved: status={download.get('status')}")
-
-        if download["status"] != "completed":
-            error_msg = f"Download not completed: {download['status']}"
-            logger.warning(error_msg)
-            raise ValueError(error_msg)
-
-        file_path = download.get("filename")
-        logger.info(f"File path from DB: {file_path}")
-
-        if not file_path:
-            raise ValueError("No filename stored in database")
-
-        if not os.path.exists(file_path):
-            logger.error(f"File does not exist at path: {file_path}")
-            logger.info(f"Available files would need to be checked in save directory")
-            raise ValueError(f"File not found at: {file_path}")
-
-        file_size = os.path.getsize(file_path)
-        filename = os.path.basename(file_path)
-
-        logger.info(f"Serving file: {filename} ({file_size / (1024*1024):.2f} MB)")
-
-        return FileResponse(
-            path=file_path,
-            filename=filename,
-            media_type='video/mp4',
-            headers={"Content-Disposition": f"attachment; filename=\"{filename}\""}
-        )
-    except Exception as e:
-        logger.error(f"Auto download error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=404, detail=str(e))

@@ -352,21 +352,63 @@ app.get('/api/download/:download_id/auto-download', async (req, res) => {
   try {
     const { download_id } = req.params;
     const { session_id } = req.query;
-    const response = await fetch(`${pythonBackendUrl}/api/download/${download_id}/auto-download?session_id=${session_id}`);
+    const fs = require('fs');
+    const fsPromises = fs.promises;
 
-    if (response.headers.get('content-type')?.includes('application/json')) {
-      const data = await response.json();
-      res.json(data);
-    } else {
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      res.set('Content-Type', 'video/mp4');
-      res.set('Content-Disposition', response.headers.get('content-disposition'));
-      res.send(buffer);
+    // Query MongoDB directly to get download info
+    const downloadsCollection = db.collection('downloads');
+    const download = await downloadsCollection.findOne({ download_id });
+
+    if (!download) {
+      return res.status(404).json({ success: false, message: 'Download not found' });
     }
+
+    if (download.status !== 'completed') {
+      return res.status(400).json({ success: false, message: `Download not completed: ${download.status}` });
+    }
+
+    // Priority 1: Try to serve from local file if it exists (fastest)
+    if (download.filename && fs.existsSync(download.filename)) {
+      try {
+        console.log(`[DOWNLOAD] Serving from local: ${download_id}`);
+        const fileBuffer = await fsPromises.readFile(download.filename);
+        res.set('Content-Type', 'video/mp4');
+        res.set('Content-Disposition', `attachment; filename="${require('path').basename(download.filename)}"`);
+        res.set('Content-Length', fileBuffer.length);
+        return res.send(fileBuffer);
+      } catch (err) {
+        console.warn(`[DOWNLOAD] Local file read failed, falling back: ${err.message}`);
+      }
+    }
+
+    // Priority 2: Stream from Cloudinary if URL is available
+    if (download.file_url) {
+      console.log(`[DOWNLOAD] Streaming from Cloudinary: ${download_id}`);
+      const response = await fetch(download.file_url);
+
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        if (buffer.length > 0) {
+          const filename = download.filename ? require('path').basename(download.filename) : `download-${download_id}.mp4`;
+          res.set('Content-Type', 'video/mp4');
+          res.set('Content-Disposition', `attachment; filename="${filename}"`);
+          res.set('Content-Length', buffer.length);
+          return res.send(buffer);
+        }
+      }
+    }
+
+    // No file available anywhere
+    return res.status(404).json({
+      success: false,
+      message: 'Video file no longer available. Please re-download from the original source.'
+    });
+
   } catch (err) {
-    console.error('Auto-download proxy error:', err.message);
-    res.json({ success: false, message: `Auto-download failed: ${err.message}` });
+    console.error('Auto-download error:', err.message);
+    res.status(500).json({ success: false, message: `Auto-download failed: ${err.message}` });
   }
 });
 
