@@ -248,15 +248,103 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true, message: 'Session terminated' });
 });
 
+// ============ PYTHON BACKEND PROXY ============
+// Forward metadata and download requests to Python backend (port 5000 for local, 8000 for production)
+const pythonBackendUrl = process.env.PYTHON_BACKEND_URL || (process.env.NODE_ENV === 'production' ? 'http://localhost:8000' : 'http://localhost:5000');
+
+app.post('/api/metadata', async (req, res) => {
+  try {
+    const response = await fetch(`${pythonBackendUrl}/api/metadata`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Metadata proxy error:', err.message);
+    res.json({ success: false, message: `Metadata fetch failed: ${err.message}` });
+  }
+});
+
+app.post('/api/download', async (req, res) => {
+  try {
+    const response = await fetch(`${pythonBackendUrl}/api/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body)
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Download proxy error:', err.message);
+    res.json({ success: false, message: `Download request failed: ${err.message}` });
+  }
+});
+
+app.get('/api/downloads', async (req, res) => {
+  try {
+    const { session_id } = req.query;
+    const response = await fetch(`${pythonBackendUrl}/api/downloads?session_id=${session_id}`);
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error('Downloads list proxy error:', err.message);
+    res.json({ success: false, downloads: [], message: `Failed to fetch downloads: ${err.message}` });
+  }
+});
+
+app.get('/api/download/:download_id/auto-download', async (req, res) => {
+  try {
+    const { download_id } = req.params;
+    const { session_id } = req.query;
+    const response = await fetch(`${pythonBackendUrl}/api/download/${download_id}/auto-download?session_id=${session_id}`);
+
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      const buffer = await response.buffer();
+      res.set('Content-Type', 'video/mp4');
+      res.set('Content-Disposition', response.headers.get('content-disposition'));
+      res.send(buffer);
+    }
+  } catch (err) {
+    console.error('Auto-download proxy error:', err.message);
+    res.json({ success: false, message: `Auto-download failed: ${err.message}` });
+  }
+});
+
+app.get('/api/download/:download_id/stream', async (req, res) => {
+  try {
+    const { download_id } = req.params;
+    const { session_id } = req.query;
+    const response = await fetch(`${pythonBackendUrl}/api/download/${download_id}/stream?session_id=${session_id}`);
+
+    if (response.headers.get('content-type')?.includes('application/json')) {
+      const data = await response.json();
+      res.json(data);
+    } else {
+      const buffer = await response.buffer();
+      res.set('Content-Type', 'video/mp4');
+      res.set('Content-Disposition', response.headers.get('content-disposition'));
+      res.send(buffer);
+    }
+  } catch (err) {
+    console.error('Stream proxy error:', err.message);
+    res.json({ success: false, message: `Stream failed: ${err.message}` });
+  }
+});
+
 console.log('[STARTUP] ✓ API endpoints registered successfully\n');
 
-// 404 handler for missing API routes
+// 404 handler for missing API routes (must be after specific routes)
 app.all('/api/*', (req, res) => {
-  res.status(404).json({ 
-    success: false, 
-    message: 'API endpoint not found', 
-    path: req.path, 
-    method: req.method 
+  res.status(404).json({
+    success: false,
+    message: 'API endpoint not found',
+    path: req.path,
+    method: req.method
   });
 });
 
