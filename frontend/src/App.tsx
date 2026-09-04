@@ -121,7 +121,7 @@ function App() {
   const createSession = useCallback(async () => {
     try {
       console.log('[DEBUG] Creating session with API URL:', apiUrl);
-      const res = await apiCall(`${apiUrl}/api/session`, { method: 'POST' });
+      const res = await apiCall(`${apiUrl}/api/session`, { method: 'GET' });
       const data = await res.json();
       console.log('[DEBUG] Session response:', data);
       if (data.success) {
