@@ -29,15 +29,15 @@ class CleanupService:
         logger.info("Cleanup service started - runs every 5 minutes")
 
     def _cleanup_worker(self):
-        """Run cleanup every 5 minutes to delete expired sessions"""
+        """Run cleanup every 10 minutes to delete expired sessions"""
         while True:
             try:
                 asyncio.run(self._cleanup_expired_sessions())
             except Exception as e:
                 logger.error(f"Cleanup worker error: {str(e)}")
 
-            # Sleep for 5 minutes before next cleanup
-            time.sleep(300)
+            # Sleep for 10 minutes before next cleanup (increased to reduce load)
+            time.sleep(600)
 
     async def _cleanup_expired_sessions(self):
         """Find and delete inactive sessions with their downloads and files"""

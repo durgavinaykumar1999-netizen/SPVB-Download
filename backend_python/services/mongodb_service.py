@@ -44,7 +44,12 @@ class MongoDBService:
         if self._connected:
             return
         try:
-            self.client = MongoClient(config.mongodb_uri, serverSelectionTimeoutMS=5000)
+            self.client = MongoClient(
+                config.mongodb_uri,
+                serverSelectionTimeoutMS=10000,
+                socketTimeoutMS=10000,
+                connectTimeoutMS=10000
+            )
             self.client.admin.command('ping')
             self.db = self.client[config.mongodb_db_name]
             self.sessions = self.db["sessions"]
