@@ -194,27 +194,8 @@ app.post('/api/session', (req, res) => {
   res.json({ success: true, session_id: sessionId });
 });
 
-// Get Downloads
-app.get('/api/downloads', (req, res) => {
-  const { session_id } = req.query;
-  const sessionData = sessions.get(session_id);
-
-  if (!sessionData) {
-    return res.json({ success: false, downloads: [], message: 'Session expired' });
-  }
-
-  // Check if session expired
-  if (Date.now() > sessionData.expires) {
-    sessions.delete(session_id);
-    userStats.delete(session_id);
-    return res.json({ success: false, downloads: [], message: 'Session expired - please refresh' });
-  }
-
-  // Update expiry time on each request
-  sessionData.expires = Date.now() + SESSION_TIMEOUT;
-
-  res.json({ success: true, downloads: [] });
-});
+// Get Downloads - now proxies to Python backend
+// (removed old endpoint that was returning empty array)
 
 // Admin Stats (public - for showing user count)
 app.get('/api/admin/stats', (req, res) => {
@@ -304,7 +285,8 @@ app.get('/api/download/:download_id/auto-download', async (req, res) => {
       const data = await response.json();
       res.json(data);
     } else {
-      const buffer = await response.buffer();
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
       res.set('Content-Type', 'video/mp4');
       res.set('Content-Disposition', response.headers.get('content-disposition'));
       res.send(buffer);
@@ -325,7 +307,8 @@ app.get('/api/download/:download_id/stream', async (req, res) => {
       const data = await response.json();
       res.json(data);
     } else {
-      const buffer = await response.buffer();
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
       res.set('Content-Type', 'video/mp4');
       res.set('Content-Disposition', response.headers.get('content-disposition'));
       res.send(buffer);

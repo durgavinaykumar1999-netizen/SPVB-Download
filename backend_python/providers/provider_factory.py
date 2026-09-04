@@ -32,6 +32,13 @@ def _get_twitter_provider():
     except ImportError:
         raise ValueError("Twitter provider not available")
 
+def _get_generic_provider():
+    try:
+        from .generic_provider import GenericProvider
+        return GenericProvider
+    except ImportError:
+        raise ValueError("Generic provider not available")
+
 class ProviderFactory:
     @staticmethod
     def get_provider(url: str):
@@ -47,7 +54,9 @@ class ProviderFactory:
         elif "twitter.com" in domain or "x.com" in domain:
             return _get_twitter_provider()()
         else:
-            raise ValueError(f"Unsupported platform: {domain}")
+            # Use generic provider as fallback (YouTube, Twitch, etc)
+            logger.info(f"Using generic provider for: {domain}")
+            return _get_generic_provider()()
 
 def get_provider(url: str):
     return ProviderFactory.get_provider(url)

@@ -79,7 +79,7 @@ class DownloadQueue:
                     await self.db.update_download(download_id, {"progress": 90})
                     cloudinary_url = await self.cloudinary.upload_video(
                         result["filename"],
-                        f"{download_id}.mp4"
+                        download_id  # Don't add .mp4 extension - Cloudinary detects it
                     )
 
                 await self.db.update_download(
