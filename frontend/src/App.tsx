@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
-import { AdGameBanner } from './Ads';
+import { AdGameBanner, SmallBannerAd, MobileBannerAd } from './Ads';
 import AdminLogin from './AdminLogin';
 import AdminPanel from './AdminPanel';
 import GamesList from './GamesList';
@@ -548,6 +548,7 @@ const manualDownload = useCallback(async () => {
             {/* Left Main Content */}
             <div className="content-main">
 
+            {SHOW_THIRD_PARTY_ADS && <SmallBannerAd />}
             <div className="tabs-container">
               <button
                 className={`tab ${activeTab === 'download' ? 'active' : ''}`}
@@ -594,6 +595,7 @@ const manualDownload = useCallback(async () => {
             </div>
         </section>
 
+        {SHOW_THIRD_PARTY_ADS && <MobileBannerAd />}
         <Features />
         <ScrollingNotice />
         <Footer />
@@ -1007,17 +1009,8 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
     return () => document.removeEventListener('keydown', onKey);
   }, []);
 
-  // Mobile back button: never let it close the app from the game page.
-  // Any back navigation returns to the home screen instead of exiting.
-  useEffect(() => {
-    if (window.history.state && window.history.state.gameGuard) return;
-    window.history.pushState({ gameGuard: true }, document.title);
-    const onPop = () => {
-      window.location.replace('/');
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  // Allow normal back button behavior - don't force redirects
+  // Users should be able to navigate freely
 
   const toggleFullscreen = () => {
     const el = document.querySelector('.game-frame');
