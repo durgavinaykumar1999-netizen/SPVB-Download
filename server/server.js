@@ -26,9 +26,38 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// In-memory storage (for development - replace with database in production)
-const games = [];
-const movies = [];
+// MongoDB Setup for Games, Movies, and Sessions
+const { MongoClient } = require('mongodb');
+
+let mongoClient;
+let db;
+let gamesCollection;
+let moviesCollection;
+let sessionsCollection;
+
+const connectMongoDB = async () => {
+  try {
+    mongoClient = new MongoClient(process.env.MONGODB_URI || 'mongodb://localhost:27017');
+    await mongoClient.connect();
+    db = mongoClient.db(process.env.MONGODB_DB_NAME || 'spvb-downloader');
+
+    gamesCollection = db.collection('games');
+    moviesCollection = db.collection('movies');
+    sessionsCollection = db.collection('sessions');
+
+    // Create indexes
+    await gamesCollection.createIndex({ id: 1 }, { unique: true }).catch(() => {});
+    await moviesCollection.createIndex({ id: 1 }, { unique: true }).catch(() => {});
+    await sessionsCollection.createIndex({ session_id: 1 }, { unique: true }).catch(() => {});
+
+    console.log('[DB] ✅ MongoDB connected for games, movies, and sessions');
+  } catch (err) {
+    console.error('[DB] ❌ MongoDB connection failed:', err.message);
+    throw err;
+  }
+};
+
+// In-memory maps for sessions (fallback, also sync with MongoDB)
 const adminUsers = new Map([
   [process.env.ADMIN_USERNAME || 'admin', { password: process.env.ADMIN_PASSWORD || 'admin2026' }]
 ]);
@@ -86,96 +115,130 @@ const verifyAdminToken = (req, res, next) => {
 };
 
 // Add Game
-app.post('/api/admin/games/add', verifyAdminToken, (req, res) => {
-  const { name, url, thumbnail } = req.body;
+app.post('/api/admin/games/add', verifyAdminToken, async (req, res) => {
+  try {
+    const { name, url, thumbnail } = req.body;
 
-  if (!name || !url) {
-    return res.json({ success: false, message: 'Name and URL required' });
+    if (!name || !url) {
+      return res.json({ success: false, message: 'Name and URL required' });
+    }
+
+    const gameId = 'game-' + Date.now();
+    const newGame = {
+      id: gameId,
+      name,
+      url,
+      thumbnail: thumbnail || '',
+      createdAt: new Date().toISOString(),
+      plays: 0,
+      downloads: 0
+    };
+
+    await gamesCollection.insertOne(newGame);
+    res.json({ success: true, gameId, game: newGame });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to add game: ' + err.message });
   }
-
-  const gameId = 'game-' + Date.now();
-  const newGame = {
-    id: gameId,
-    name,
-    url,
-    thumbnail: thumbnail || '',
-    createdAt: new Date().toISOString(),
-    plays: 0,
-    downloads: 0
-  };
-
-  games.push(newGame);
-  res.json({ success: true, gameId, game: newGame });
 });
 
 // Get Admin Games List
-app.get('/api/admin/games', verifyAdminToken, (req, res) => {
-  res.json({ success: true, games });
+app.get('/api/admin/games', verifyAdminToken, async (req, res) => {
+  try {
+    const games = await gamesCollection.find({}).toArray();
+    res.json({ success: true, games });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to fetch games: ' + err.message });
+  }
 });
 
 // Delete Game
-app.delete('/api/admin/games/:id', verifyAdminToken, (req, res) => {
-  const { id } = req.params;
-  const index = games.findIndex(g => g.id === id);
+app.delete('/api/admin/games/:id', verifyAdminToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await gamesCollection.deleteOne({ id });
 
-  if (index === -1) {
-    return res.json({ success: false, message: 'Game not found' });
+    if (result.deletedCount === 0) {
+      return res.json({ success: false, message: 'Game not found' });
+    }
+
+    res.json({ success: true, message: 'Game deleted' });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to delete game: ' + err.message });
   }
-
-  games.splice(index, 1);
-  res.json({ success: true, message: 'Game deleted' });
 });
 
 // Get Public Games List
-app.get('/api/games/list', (req, res) => {
-  res.json({ success: true, games });
+app.get('/api/games/list', async (req, res) => {
+  try {
+    const games = await gamesCollection.find({}).toArray();
+    res.json({ success: true, games });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to fetch games: ' + err.message });
+  }
 });
 
 // ============ MOVIES ENDPOINTS ============
 
 // Add Movie
-app.post('/api/admin/movies/add', verifyAdminToken, (req, res) => {
-  const { name, url, thumbnail } = req.body;
+app.post('/api/admin/movies/add', verifyAdminToken, async (req, res) => {
+  try {
+    const { name, url, thumbnail } = req.body;
 
-  if (!name || !url) {
-    return res.json({ success: false, message: 'Name and URL required' });
+    if (!name || !url) {
+      return res.json({ success: false, message: 'Name and URL required' });
+    }
+
+    const movieId = 'movie-' + Date.now();
+    const newMovie = {
+      id: movieId,
+      name,
+      url,
+      thumbnail: thumbnail || '',
+      createdAt: new Date().toISOString(),
+      plays: 0
+    };
+
+    await moviesCollection.insertOne(newMovie);
+    res.json({ success: true, movieId, movie: newMovie });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to add movie: ' + err.message });
   }
-
-  const movieId = 'movie-' + Date.now();
-  const newMovie = {
-    id: movieId,
-    name,
-    url,
-    thumbnail: thumbnail || '',
-    createdAt: new Date().toISOString(),
-    plays: 0
-  };
-
-  movies.push(newMovie);
-  res.json({ success: true, movieId, movie: newMovie });
 });
 
 // Get Admin Movies List
-app.get('/api/admin/movies', verifyAdminToken, (req, res) => {
-  res.json({ success: true, movies });
+app.get('/api/admin/movies', verifyAdminToken, async (req, res) => {
+  try {
+    const movies = await moviesCollection.find({}).toArray();
+    res.json({ success: true, movies });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to fetch movies: ' + err.message });
+  }
 });
 
 // Delete Movie
-app.delete('/api/admin/movies/:id', verifyAdminToken, (req, res) => {
-  const { id } = req.params;
-  const index = movies.findIndex(m => m.id === id);
+app.delete('/api/admin/movies/:id', verifyAdminToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await moviesCollection.deleteOne({ id });
 
-  if (index === -1) {
-    return res.json({ success: false, message: 'Movie not found' });
+    if (result.deletedCount === 0) {
+      return res.json({ success: false, message: 'Movie not found' });
+    }
+
+    res.json({ success: true, message: 'Movie deleted' });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to delete movie: ' + err.message });
   }
-
-  movies.splice(index, 1);
-  res.json({ success: true, message: 'Movie deleted' });
 });
 
 // Get Public Movies List
-app.get('/api/movies/list', (req, res) => {
-  res.json({ success: true, movies });
+app.get('/api/movies/list', async (req, res) => {
+  try {
+    const movies = await moviesCollection.find({}).toArray();
+    res.json({ success: true, movies });
+  } catch (err) {
+    res.json({ success: false, message: 'Failed to fetch movies: ' + err.message });
+  }
 });
 
 // Session Management
@@ -198,27 +261,37 @@ app.post('/api/session', (req, res) => {
 // (removed old endpoint that was returning empty array)
 
 // Admin Stats (public - for showing user count)
-app.get('/api/admin/stats', (req, res) => {
-  const totalUsers = sessions.size;
-  let totalDownloads = 0;
-  let totalPlays = 0;
+app.get('/api/admin/stats', async (req, res) => {
+  try {
+    const totalUsers = sessions.size;
+    let totalDownloads = 0;
+    let totalPlays = 0;
 
-  userStats.forEach(stat => {
-    totalDownloads += stat.downloads || 0;
-    totalPlays += stat.plays || 0;
-  });
+    userStats.forEach(stat => {
+      totalDownloads += stat.downloads || 0;
+      totalPlays += stat.plays || 0;
+    });
 
-  res.json({
-    success: true,
-    stats: {
-      totalGames: games.length,
-      totalMovies: movies.length,
-      totalUsers,
-      totalDownloads,
-      totalPlays,
-      activeSessions: sessions.size
-    }
-  });
+    const totalGames = await gamesCollection.countDocuments({});
+    const totalMovies = await moviesCollection.countDocuments({});
+
+    res.json({
+      success: true,
+      stats: {
+        totalGames,
+        totalMovies,
+        totalUsers,
+        totalDownloads,
+        totalPlays,
+        activeSessions: sessions.size
+      }
+    });
+  } catch (err) {
+    res.json({
+      success: false,
+      message: 'Failed to fetch stats: ' + err.message
+    });
+  }
 });
 
 // Logout / Kill Session
@@ -354,10 +427,25 @@ app.get('*', (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`\n✅ SPVB Platform Server running successfully`);
-  console.log(`🌐 URL: http://localhost:${PORT}`);
-  console.log(`🔑 API Base: http://localhost:${PORT}/api`);
-  console.log(`📊 Health: http://localhost:${PORT}/health`);
-  console.log(`\n=== SERVER READY ===\n`);
-});
+const startServer = async () => {
+  try {
+    // Connect to MongoDB
+    await connectMongoDB();
+
+    // Start Express server
+    app.listen(PORT, () => {
+      console.log(`\n✅ SPVB Platform Server running successfully`);
+      console.log(`🌐 URL: http://localhost:${PORT}`);
+      console.log(`🔑 API Base: http://localhost:${PORT}/api`);
+      console.log(`📊 Health: http://localhost:${PORT}/health`);
+      console.log(`📦 Database: MongoDB (spvb-downloader)`);
+      console.log(`💾 Collections: games, movies, downloads, sessions`);
+      console.log(`\n=== SERVER READY ===\n`);
+    });
+  } catch (err) {
+    console.error('[ERROR] Failed to start server:', err.message);
+    process.exit(1);
+  }
+};
+
+startServer();
