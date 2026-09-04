@@ -367,13 +367,23 @@ app.get('/api/download/:download_id/auto-download', async (req, res) => {
       return res.status(400).json({ success: false, message: `Download not completed: ${download.status}` });
     }
 
+    // Helper function to sanitize filename for HTTP headers (remove special chars)
+    const sanitizeFilename = (filename) => {
+      return filename
+        .replace(/[^\w\s.-]/g, '_')  // Replace special chars with underscore
+        .replace(/\s+/g, '_')         // Replace spaces with underscore
+        .replace(/_+/g, '_')          // Collapse multiple underscores
+        .substring(0, 255);           // Limit to 255 chars
+    };
+
     // Priority 1: Try to serve from local file if it exists (fastest)
     if (download.filename && fs.existsSync(download.filename)) {
       try {
         console.log(`[DOWNLOAD] Serving from local: ${download_id}`);
         const fileBuffer = await fsPromises.readFile(download.filename);
         res.set('Content-Type', 'video/mp4');
-        res.set('Content-Disposition', `attachment; filename="${require('path').basename(download.filename)}"`);
+        const filename = sanitizeFilename(require('path').basename(download.filename));
+        res.set('Content-Disposition', `attachment; filename="${filename}"`);
         res.set('Content-Length', fileBuffer.length);
         return res.send(fileBuffer);
       } catch (err) {
@@ -391,7 +401,8 @@ app.get('/api/download/:download_id/auto-download', async (req, res) => {
         const buffer = Buffer.from(arrayBuffer);
 
         if (buffer.length > 0) {
-          const filename = download.filename ? require('path').basename(download.filename) : `download-${download_id}.mp4`;
+          const rawFilename = download.filename ? require('path').basename(download.filename) : `download-${download_id}.mp4`;
+          const filename = sanitizeFilename(rawFilename);
           res.set('Content-Type', 'video/mp4');
           res.set('Content-Disposition', `attachment; filename="${filename}"`);
           res.set('Content-Length', buffer.length);

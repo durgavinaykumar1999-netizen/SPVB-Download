@@ -109,6 +109,8 @@ function App() {
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
+  const metadataLoadTimeRef = useRef<number>(0);  // Track when metadata was loaded
+  const currentDownloadInitiatedRef = useRef<boolean>(false);  // Track if user clicked Download for current metadata
 
   const isMobile = () => /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
 
@@ -181,6 +183,10 @@ function App() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!url) {
       setValidation(null);
+      setMetadata(null);        // Clear metadata when URL is cleared
+      setDownloadState(null);   // Clear download state when URL is cleared
+      setCompletedDownload(null); // Clear completed download
+      setPhase('idle');
       return;
     }
     debounceRef.current = setTimeout(() => {
@@ -190,6 +196,12 @@ function App() {
       }
       const platform = detectPlatform(url);
       setValidation(platform ? 'valid' : 'unsupported');
+      // Clear previous download state and metadata when URL changes
+      setMetadata(null);
+      setDownloadState(null);   // IMPORTANT: Reset download state for new URL
+      setCompletedDownload(null); // Clear any previous download result
+      currentDownloadInitiatedRef.current = false;  // Reset download initiation flag
+      setPhase('idle');
     }, 350);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -238,14 +250,16 @@ function App() {
       push('⏳ Creating session... Please try again', 'error');
       return;
     }
-    if (metadataCacheRef.current[url]) {
-      setMetadata(metadataCacheRef.current[url]);
-      setSelectedQuality(metadataCacheRef.current[url].qualities[0]?.value?.toString() || 'best');
-      setPhase('result');
-      push('✅ Loaded from cache');
-      return;
-    }
+
+    // IMPORTANT: Always fetch fresh metadata for new URL (don't use cache)
+    // Cache was causing old Instagram metadata to show for new YouTube URL
+    // Clear previous metadata and state for new URL
+    setMetadata(null);
+    setDownloadState(null);     // Reset download state when fetching new metadata
+    setCompletedDownload(null); // Clear previous download result
+    currentDownloadInitiatedRef.current = false;  // Reset download initiation flag
     setPhase('loading');
+
     try {
       const res = await apiCall(`${apiUrl}/api/metadata`, {
         method: 'POST',
@@ -258,7 +272,9 @@ function App() {
 
       const data = await res.json();
       if (data.success) {
+        // Cache new metadata
         metadataCacheRef.current[url] = data.metadata;
+        metadataLoadTimeRef.current = Date.now();  // Record when metadata was loaded
         setMetadata(data.metadata);
         setSelectedQuality(data.metadata.qualities[0]?.value?.toString() || 'best');
         setPhase('result');
@@ -299,8 +315,20 @@ const manualDownload = useCallback(async () => {
   }, [apiUrl, sessionId, push, completedDownload, metadata]);
 
   useEffect(() => {
-    if (downloads.length > 0) {
-      const latestDownload = downloads[downloads.length - 1];
+    // CRITICAL: Only show download state if user clicked Download for CURRENT metadata
+    // Don't show old "100%" from previous videos
+    if (!metadata || !url || !currentDownloadInitiatedRef.current) {
+      return;  // Don't show any download progress if user hasn't clicked Download yet
+    }
+
+    if (downloads.length === 0) {
+      return;
+    }
+
+    // Get the most recent download
+    const latestDownload = downloads[downloads.length - 1];
+
+    if (latestDownload) {
       if (latestDownload.status === 'downloading') {
         const progress = latestDownload.progress || 0;
         setDownloadState(`downloading_${progress}`);
@@ -325,7 +353,7 @@ const manualDownload = useCallback(async () => {
           localStorage.setItem('spvb_download_history', JSON.stringify(updated));
           return updated;
         });
-      } else if (latestDownload.status === 'error') {
+      } else if (latestDownload.status === 'failed') {
         setDownloadState(null);
         push(`❌ Download error: ${latestDownload.error}`, 'error');
       }
@@ -338,6 +366,8 @@ const manualDownload = useCallback(async () => {
       return;
     }
 
+    // Mark that user initiated download for current metadata
+    currentDownloadInitiatedRef.current = true;
     setDownloadState('preparing');
     setCompletedDownload(null);
     try {
@@ -706,7 +736,7 @@ function ResultCard({ data, selectedQuality, setSelectedQuality, onDownload, dow
               <span className="spinner"></span>⬇️ {downloadState.split('_')[1] || '0'}%
             </>
           ) : downloadState === 'complete' ? (
-            <>⬇️ Download 100%</>
+            <>✅ Completed</>
           ) : (
             <>⬇️ Download {typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality}</>
           )}

@@ -106,14 +106,16 @@ class DownloadQueue:
                     }
                 )
 
-                # Clean up temp directory
-                try:
-                    import shutil
-                    temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
-                    if os.path.exists(temp_download_dir):
-                        shutil.rmtree(temp_download_dir)
-                except Exception as e:
-                    logger.warning(f"Failed to clean temp directory: {str(e)}")
+                # IMPORTANT: Keep temp directory for backup/recovery
+                # Files are already in Cloudinary, but local backup helps if upload fails
+                # Manual cleanup should be done via admin API only
+                # try:
+                #     import shutil
+                #     temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
+                #     if os.path.exists(temp_download_dir):
+                #         shutil.rmtree(temp_download_dir)
+                # except Exception as e:
+                #     logger.warning(f"Failed to clean temp directory: {str(e)}")
 
             asyncio.run(process())
 

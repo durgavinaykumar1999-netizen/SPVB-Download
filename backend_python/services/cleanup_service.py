@@ -71,21 +71,10 @@ class CleanupService:
             # Get all downloads for this session
             downloads = list(self.db.downloads.find({"session_id": session_id}))
 
-            # Delete files from Cloudinary
-            for download in downloads:
-                file_url = download.get("file_url")
-                if file_url:
-                    try:
-                        # Extract public_id from Cloudinary URL
-                        # URL format: https://res.cloudinary.com/.../upload/vXXXX/spvb-downloader/filename.mp4
-                        if "spvb-downloader/" in file_url:
-                            public_id = file_url.split("spvb-downloader/")[1].replace(".mp4", "")
-                            full_public_id = f"spvb-downloader/{public_id}"
-
-                            logger.info(f"Deleting file from Cloudinary: {full_public_id}")
-                            await self.cloudinary.delete_video(full_public_id)
-                    except Exception as e:
-                        logger.error(f"Error deleting file from Cloudinary: {str(e)}")
+            # IMPORTANT: Do NOT delete files from Cloudinary!
+            # Files should persist permanently in Cloudinary for user access
+            # Only delete MongoDB records and local temp files
+            # For manual Cloudinary cleanup, use admin API only
 
             # Delete all downloads from MongoDB
             self.db.downloads.delete_many({"session_id": session_id})
