@@ -1,12 +1,18 @@
 services:
   - type: web
-    name: spvb-download-backend
+    name: spvb-downloader
     runtime: node
+    region: oregon
     plan: free
-    buildCommand: npm install && cd frontend && npm install && npm run build && cd ..
-    startCommand: npm install && node server/server.js
+    startCommand: node server/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+      - key: MONGODB_URI
+        fromDatabase:
+          name: spvb-downloader
+          property: connectionString
+    autoDeploy: true
+    healthCheckPath: /health
