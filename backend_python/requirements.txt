@@ -20,7 +20,7 @@ instaloader>=4.13
 aiohttp==3.9.1
 
 # Authentication
-PyJWT==2.8.1
+PyJWT==2.13.0
 
 # Utilities
 requests==2.31.0
