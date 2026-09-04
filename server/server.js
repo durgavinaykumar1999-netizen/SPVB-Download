@@ -485,12 +485,12 @@ const startServer = async () => {
     // Connect to MongoDB
     await connectMongoDB();
 
-    // Start Express server
-    app.listen(PORT, () => {
+    // Start Express server - listen on 0.0.0.0 for production (Render, etc.)
+    app.listen(PORT, '0.0.0.0', () => {
       console.log(`\n✅ SPVB Platform Server running successfully`);
-      console.log(`🌐 URL: http://localhost:${PORT}`);
-      console.log(`🔑 API Base: http://localhost:${PORT}/api`);
-      console.log(`📊 Health: http://localhost:${PORT}/health`);
+      console.log(`🌐 URL: http://0.0.0.0:${PORT}`);
+      console.log(`🔑 API Base: http://0.0.0.0:${PORT}/api`);
+      console.log(`📊 Health: http://0.0.0.0:${PORT}/health`);
       console.log(`📦 Database: MongoDB (spvb-downloader)`);
       console.log(`💾 Collections: games, movies, downloads, sessions`);
       console.log(`\n=== SERVER READY ===\n`);
