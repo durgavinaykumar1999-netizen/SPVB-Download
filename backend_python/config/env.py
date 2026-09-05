@@ -13,6 +13,10 @@ class Config:
     mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
     mongodb_db_name = "spvb-downloader"
 
+    # Admin Configuration
+    admin_username = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password = os.getenv("ADMIN_PASSWORD", "admin123")
+
     # Cloudinary Configuration
     cloudinary_cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "")
     cloudinary_api_key = os.getenv("CLOUDINARY_API_KEY", "")

@@ -20,7 +20,7 @@ def verify_admin_token(authorization: str = Header(None)):
     try:
         payload = jwt.decode(token, config.session_secret, algorithms=["HS256"])
         username = payload.get("username")
-        if username not in ["admin", "secureadmin2026"]:
+        if username != config.admin_username:
             raise HTTPException(status_code=403, detail="Unauthorized")
         return username
     except Exception as e:
@@ -40,16 +40,9 @@ class AdminLoginRequest(BaseModel):
 @router.post("/login")
 async def admin_login(request: AdminLoginRequest):
     """Login endpoint - returns JWT token"""
-    if request.username == "admin" and request.password == "admin123":
+    if request.username == config.admin_username and request.password == config.admin_password:
         token = jwt.encode(
             {"username": request.username},
-            config.session_secret,
-            algorithm="HS256"
-        )
-        return {"success": True, "token": token}
-    elif request.username == "admin" and request.password == "secureadmin2026":
-        token = jwt.encode(
-            {"username": "secureadmin2026"},
             config.session_secret,
             algorithm="HS256"
         )

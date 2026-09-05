@@ -72,9 +72,7 @@ export default function AdminLogin({ onLogin }: AdminLoginProps) {
         </form>
 
         <div className="admin-info">
-          <p>📝 Test credentials:</p>
-          <p>Username: <strong>admin</strong></p>
-          <p>Password: <strong>admin123</strong></p>
+          <p>🔐 Enter your admin credentials to continue</p>
         </div>
       </div>
     </div>
