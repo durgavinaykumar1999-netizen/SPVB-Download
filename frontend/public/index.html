@@ -11,157 +11,57 @@
     <link rel="icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
     <link rel="shortcut icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
     <title>SPVB - Social Media Video Downloader</title>
-    <!-- Redirect Protection for Mobile -->
+    <!-- Mobile Ad Protection: Prevent unwanted redirects -->
     <script>
       (function() {
         const isMobile = /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
-        const appDomain = window.location.hostname;
-        let redirectAttempts = 0;
-        const maxRedirectAttempts = 2;
+        if (!isMobile) return;
 
-        const blockRedirect = function(url) {
-          if (!url) return false;
-          // Allow highrevenueformat ad network
-          if (url.includes('highrevenueformat.com')) return false;
-          const isExternalAd = /ads|redirect|popup|tracking/i.test(url);
-          const isAppDomain = new URL(url, window.location.href).hostname === appDomain;
-          return isMobile && isExternalAd && !isAppDomain;
-        };
-
+        // Block all window.open calls that try to navigate away from app
         const originalOpen = window.open;
         window.open = function(url, target, features) {
-          if (blockRedirect(url)) {
-            console.warn('[SPVB] Blocked external redirect:', url);
-            return null;
+          if (url && typeof url === 'string') {
+            const urlObj = new URL(url, window.location.href);
+            // Allow internal app links only
+            if (urlObj.hostname !== window.location.hostname) {
+              console.warn('[SPVB] Blocked external redirect:', url);
+              return null;
+            }
           }
           return originalOpen.call(window, url, target, features);
         };
 
+        // Prevent window.location changes on mobile
+        const blockNavigation = (url) => {
+          if (!url || typeof url !== 'string') return false;
+          try {
+            const urlObj = new URL(url, window.location.href);
+            // Block external navigation
+            return urlObj.hostname !== window.location.hostname;
+          } catch {
+            return false;
+          }
+        };
+
         const originalAssign = window.location.assign;
         window.location.assign = function(url) {
-          if (blockRedirect(url)) {
-            redirectAttempts++;
-            if (redirectAttempts <= maxRedirectAttempts) {
-              console.warn('[SPVB] Blocked redirect attempt:', url);
-              return;
-            }
+          if (blockNavigation(url)) {
+            console.warn('[SPVB] Blocked navigation:', url);
+            return;
           }
           return originalAssign.call(window.location, url);
         };
 
         const originalReplace = window.location.replace;
         window.location.replace = function(url) {
-          if (blockRedirect(url)) {
-            redirectAttempts++;
-            if (redirectAttempts <= maxRedirectAttempts) {
-              console.warn('[SPVB] Blocked redirect attempt:', url);
-              return;
-            }
+          if (blockNavigation(url)) {
+            console.warn('[SPVB] Blocked navigation:', url);
+            return;
           }
           return originalReplace.call(window.location, url);
         };
-
-        window.addEventListener('beforeunload', function(e) {
-          if (redirectAttempts > 0) {
-            redirectAttempts = 0;
-          }
-        });
       })();
     </script>
-    <!-- Ad Networks: ALL Real Ad Scripts -->
-    <!-- Highrevenueformat: 468x60 Banner (1) -->
-    <script>
-      atOptions = {
-        'key' : 'c51f0a9e64d78d55f75a4ccd8eedc96c',
-        'format' : 'iframe',
-        'height' : 60,
-        'width' : 468,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/c51f0a9e64d78d55f75a4ccd8eedc96c/invoke.js"></script>
-
-    <!-- Highrevenueformat: 300x250 Rectangle -->
-    <script>
-      atOptions = {
-        'key' : 'a37057b57277f779aa7eb6c39d0ca6d0',
-        'format' : 'iframe',
-        'height' : 250,
-        'width' : 300,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/a37057b57277f779aa7eb6c39d0ca6d0/invoke.js"></script>
-
-    <!-- Highrevenueformat: 160x300 Sidebar -->
-    <script>
-      atOptions = {
-        'key' : '8266d43ddb40fa7f697b88ce1986a7c1',
-        'format' : 'iframe',
-        'height' : 300,
-        'width' : 160,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/8266d43ddb40fa7f697b88ce1986a7c1/invoke.js"></script>
-
-    <!-- Highrevenueformat: 160x600 Sidebar Tall -->
-    <script>
-      atOptions = {
-        'key' : '569093e60d83db368a64b41564e536e7',
-        'format' : 'iframe',
-        'height' : 600,
-        'width' : 160,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/569093e60d83db368a64b41564e536e7/invoke.js"></script>
-
-    <!-- Profitableratecpmnetwork (1) -->
-    <script src="https://pl31124194.profitableratecpmnetwork.com/95/d8/cf/95d8cf0051e91631d54da7bc56ecbca1.js"></script>
-
-    <!-- Profitableratecpmnetwork (2) with Container -->
-    <script async="async" data-cfasync="false" src="https://pl31124195.profitableratecpmnetwork.com/0221bc3a4d9d8690c9c87b8d892de725/invoke.js"></script>
-    <div id="container-0221bc3a4d9d8690c9c87b8d892de725"></div>
-
-    <!-- Profitableratecpmnetwork (3) -->
-    <script src="https://pl31124197.profitableratecpmnetwork.com/ed/81/a6/ed81a612a8e2f2946bf640986f3a2b90.js"></script>
-
-    <!-- Highrevenueformat: 320x50 Mobile (1) -->
-    <script>
-      atOptions = {
-        'key' : '1029ff22b684cfa96772119d5a4a7e73',
-        'format' : 'iframe',
-        'height' : 50,
-        'width' : 320,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/1029ff22b684cfa96772119d5a4a7e73/invoke.js"></script>
-
-    <!-- Highrevenueformat: 728x90 Large Banner -->
-    <script>
-      atOptions = {
-        'key' : 'e00807f9355f6f59d09b4cb9632b1930',
-        'format' : 'iframe',
-        'height' : 90,
-        'width' : 728,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/e00807f9355f6f59d09b4cb9632b1930/invoke.js"></script>
-
-    <!-- Highrevenueformat: 320x50 Mobile (2) -->
-    <script>
-      atOptions = {
-        'key' : '1029ff22b684cfa96772119d5a4a7e73',
-        'format' : 'iframe',
-        'height' : 50,
-        'width' : 320,
-        'params' : {}
-      };
-    </script>
-    <script src="https://www.highrevenueformat.com/1029ff22b684cfa96772119d5a4a7e73/invoke.js"></script>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>

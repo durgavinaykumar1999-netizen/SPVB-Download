@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import './MoviesList.css';
 import ScrollingNotice from './ScrollingNotice';
 import { SmallBannerAd, MobileBannerAd } from './Ads';
+import LazyAdLoader from './components/LazyAdLoader';
 
 interface Movie {
   id: string;
@@ -69,10 +70,12 @@ export default function MoviesList({ onSelectMovie }: MoviesListProps) {
     );
   }
 
+  const isMobile = /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
+
   return (
     <div className="movies-list-wrapper">
       <ScrollingNotice educationMode={true} />
-      <SmallBannerAd />
+      {isMobile && <LazyAdLoader adKey="1029ff22b684cfa96772119d5a4a7e73" width={320} height={50} />}
       <div className="movies-list-container">
         <div className="movies-list-header">
           <h1>🎬 Watch Movies</h1>
@@ -106,7 +109,7 @@ export default function MoviesList({ onSelectMovie }: MoviesListProps) {
         ))}
       </div>
       </div>
-      <MobileBannerAd />
+      {isMobile && <LazyAdLoader adKey="1029ff22b684cfa96772119d5a4a7e73" width={320} height={50} />}
     </div>
   );
 }
