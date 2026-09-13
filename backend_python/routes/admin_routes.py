@@ -157,8 +157,8 @@ async def delete_movie(movie_id: str, username: str = Depends(verify_admin_token
 # ============ STATS ENDPOINT ============
 
 @router.get("/stats")
-async def get_stats(username: str = Depends(verify_admin_token)):
-    """Get admin stats"""
+async def get_stats():
+    """Get public stats (no auth required - used by the public hero/visitor counters)"""
     try:
         db._ensure_connected()
         games = list(db.games.find({}))
