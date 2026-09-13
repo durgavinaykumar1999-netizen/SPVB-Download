@@ -331,6 +331,11 @@ main, article {
   box-shadow: 0 0 12px #4ade80;
 }
 
+.hero-live-players .hero-visitors {
+  color: #67e8f9;
+  font-weight: 600;
+}
+
 @keyframes live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(0.7); }

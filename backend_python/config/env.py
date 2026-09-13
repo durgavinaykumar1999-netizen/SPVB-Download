@@ -25,7 +25,7 @@ class Config:
     # Session Configuration
     session_secret = os.getenv("SESSION_SECRET", "dev-secret-key-change-in-production")
     session_timeout = 30 * 60  # 30 minutes initial session lifetime
-    session_inactivity_timeout = 10 * 60  # 10 minutes of inactivity before cleanup
+    session_inactivity_timeout = int(os.getenv("SESSION_INACTIVITY_TIMEOUT", 30 * 60))  # 30 minutes of inactivity before cleanup
 
     # Download Configuration
     download_timeout = int(os.getenv("DOWNLOAD_TIMEOUT", 900000))  # 15 minutes in milliseconds

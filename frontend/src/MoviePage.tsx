@@ -17,6 +17,7 @@ export default function MoviePage({ onClose }: MoviePageProps = {}) {
   const [movieUrl, setMovieUrl] = useState('');
   const [movieName, setMovieName] = useState('Movie');
   const [count, setCount] = useState(2000);
+  const [visitors, setVisitors] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -67,7 +68,9 @@ export default function MoviePage({ onClose }: MoviePageProps = {}) {
         const data = await res.json();
         if (data.success) {
           const realUsers = data.stats.totalUsers || 0;
+          const realVisitors = data.stats.totalVisits || 0;
           setCount(2000 + realUsers);
+          setVisitors(realVisitors);
         }
       } catch (error) {
         setCount(2000);
@@ -179,6 +182,11 @@ export default function MoviePage({ onClose }: MoviePageProps = {}) {
         <div className="movie-viewer-count">
           <span className="live-dot"></span>
           <strong>{count.toLocaleString('en-US')}</strong> Watching
+          {visitors > 0 && (
+            <span className="movie-visitors">
+              &nbsp;·&nbsp;👥 {visitors.toLocaleString('en-US')} Visitors
+            </span>
+          )}
         </div>
         <div className="movie-header-actions">
           <button className="movie-btn" onClick={() => setControlsOpen(v => !v)}>ℹ️ Info</button>

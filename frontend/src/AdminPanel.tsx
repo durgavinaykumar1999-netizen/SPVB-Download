@@ -17,13 +17,45 @@ interface Movie {
   createdAt: string;
 }
 
+interface Visit {
+  id: string;
+  visit_id: string;
+  session_id: string;
+  fingerprint: string;
+  device_type: string;
+  browser: string;
+  os: string;
+  user_agent?: string;
+  screen: string;
+  language: string;
+  languages?: string;
+  timezone: string;
+  platform?: string;
+  referrer?: string;
+  page?: string;
+  ip: string;
+  location?: { country?: string; region?: string; city?: string; isp?: string } | null;
+  visit_count: number;
+  first_seen?: string;
+  last_seen?: string;
+}
+
+interface VisitSnapshot {
+  visits: Visit[];
+  totalVisits: number;
+  todayVisits: number;
+  activeUsers: number;
+  deviceBreakdown?: { device: string; count: number }[];
+  browserBreakdown?: { browser: string; count: number }[];
+}
+
 interface AdminPanelProps {
   token: string;
   onLogout: () => void;
 }
 
 export default function AdminPanel({ token, onLogout }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'games' | 'movies'>('games');
+  const [activeTab, setActiveTab] = useState<'games' | 'movies' | 'visitors'>('games');
   const [games, setGames] = useState<Game[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(false);
@@ -32,6 +64,14 @@ export default function AdminPanel({ token, onLogout }: AdminPanelProps) {
   const [newMovie, setNewMovie] = useState({ name: '', url: '', thumbnail: '' });
   const [message, setMessage] = useState('');
   const [moviesMessage, setMoviesMessage] = useState('');
+  const [visits, setVisits] = useState<Visit[]>([]);
+  const [visitSnapshot, setVisitSnapshot] = useState<Pick<VisitSnapshot, 'totalVisits' | 'todayVisits' | 'activeUsers' | 'deviceBreakdown' | 'browserBreakdown'>>({
+    totalVisits: 0,
+    todayVisits: 0,
+    activeUsers: 0,
+    deviceBreakdown: [],
+    browserBreakdown: [],
+  });
 
   const fetchGames = useCallback(async () => {
     try {
@@ -63,10 +103,33 @@ export default function AdminPanel({ token, onLogout }: AdminPanelProps) {
     }
   }, [token]);
 
+  const fetchVisits = useCallback(async () => {
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+      const response = await fetch(`${apiUrl}/api/admin/visits?limit=50`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        setVisits(data.visits || []);
+        setVisitSnapshot({
+          totalVisits: data.totalVisits || 0,
+          todayVisits: data.todayVisits || 0,
+          activeUsers: data.activeUsers || 0,
+          deviceBreakdown: data.deviceBreakdown || [],
+          browserBreakdown: data.browserBreakdown || [],
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch visits:', err);
+    }
+  }, [token]);
+
   useEffect(() => {
     fetchGames();
     fetchMovies();
-  }, [fetchGames, fetchMovies]);
+    fetchVisits();
+  }, [fetchGames, fetchMovies, fetchVisits]);
 
   const handleAddGame = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,6 +262,12 @@ export default function AdminPanel({ token, onLogout }: AdminPanelProps) {
           onClick={() => setActiveTab('movies')}
         >
           🎬 Movies
+        </button>
+        <button
+          className={`admin-tab ${activeTab === 'visitors' ? 'active' : ''}`}
+          onClick={() => setActiveTab('visitors')}
+        >
+          👥 Visitors
         </button>
       </div>
 
@@ -429,6 +498,110 @@ export default function AdminPanel({ token, onLogout }: AdminPanelProps) {
               </div>
             ))}
           </div>
+        </section>
+        </>
+        )}
+
+        {activeTab === 'visitors' && (
+        <>
+        {/* Visitor Summary Cards */}
+        <section className="visitor-summary">
+          <div className="summary-card">
+            <div className="summary-value">{visitSnapshot.totalVisits.toLocaleString()}</div>
+            <div className="summary-label">Total Visitors</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-value">{visitSnapshot.todayVisits.toLocaleString()}</div>
+            <div className="summary-label">Visitors Today</div>
+          </div>
+          <div className="summary-card">
+            <div className="summary-value">{visitSnapshot.activeUsers.toLocaleString()}</div>
+            <div className="summary-label">Active Users Now</div>
+          </div>
+        </section>
+
+        {/* Device & Browser Breakdown */}
+        <section className="visitor-breakdown">
+          <div className="breakdown-col">
+            <h2>📱 Device Breakdown</h2>
+            <div className="breakdown-list">
+              {visitSnapshot.deviceBreakdown && visitSnapshot.deviceBreakdown.length > 0 ? (
+                visitSnapshot.deviceBreakdown.map(d => (
+                  <div key={d.device} className="breakdown-item">
+                    <span className="breakdown-name">{d.device}</span>
+                    <span className="breakdown-count">{d.count}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="no-data">No visitor data yet</p>
+              )}
+            </div>
+          </div>
+          <div className="breakdown-col">
+            <h2>🌐 Browser Breakdown</h2>
+            <div className="breakdown-list">
+              {visitSnapshot.browserBreakdown && visitSnapshot.browserBreakdown.length > 0 ? (
+                visitSnapshot.browserBreakdown.map(b => (
+                  <div key={b.browser} className="breakdown-item">
+                    <span className="breakdown-name">{b.browser}</span>
+                    <span className="breakdown-count">{b.count}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="no-data">No visitor data yet</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Visitor Details Table */}
+        <section className="visitors-list-section">
+          <h2>📋 Visitor Details ({visits.length})</h2>
+
+          {visits.length === 0 ? (
+            <p className="no-games">No visitors recorded yet.</p>
+          ) : (
+            <div className="visitors-table">
+              <div className="table-header">
+                <div className="col-device">Device</div>
+                <div className="col-browser">Browser / OS</div>
+                <div className="col-loc">Location</div>
+                <div className="col-ip">IP</div>
+                <div className="col-meta">Details</div>
+                <div className="col-time">Last Seen</div>
+              </div>
+
+              {visits.map((visit) => (
+                <div key={visit.id} className="table-row">
+                  <div className="col-device">
+                    <strong>{visit.device_type || 'Unknown'}</strong>
+                    {visit.screen && <div className="sub-text">{visit.screen}</div>}
+                  </div>
+                  <div className="col-browser">
+                    {visit.browser || 'Unknown'}
+                    {visit.os && <div className="sub-text">{visit.os}</div>}
+                  </div>
+                  <div className="col-loc">
+                    {visit.location
+                      ? [visit.location.city, visit.location.region, visit.location.country].filter(Boolean).join(', ') || 'Unknown'
+                      : 'Unknown'}
+                    {visit.location?.isp && <div className="sub-text">{visit.location.isp}</div>}
+                  </div>
+                  <div className="col-ip">{visit.ip || '-'}</div>
+                  <div className="col-meta">
+                    <div className="sub-text">🖥 {visit.fingerprint || '-'}</div>
+                    <div className="sub-text">📱 {visit.screen || '-'} · {visit.timezone || '-'}</div>
+                    <div className="sub-text">🌐 {visit.language || '-'}</div>
+                    <div className="sub-text">📄 {visit.page || visit.referrer || '-'}</div>
+                  </div>
+                  <div className="col-time">
+                    {visit.last_seen ? new Date(visit.last_seen).toLocaleString() : '-'}
+                    <div className="sub-text">hits: {visit.visit_count ?? 1}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
         </>
         )}

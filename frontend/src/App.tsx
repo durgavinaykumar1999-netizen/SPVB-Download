@@ -7,6 +7,7 @@ import AdminPanel from './AdminPanel';
 import GamesList from './GamesList';
 import MoviesList from './MoviesList';
 import MoviePage from './MoviePage';
+import { fingerprintQuery } from './fingerprint';
 
 // Ad Networks: Highrevenueformat + Profitableratecpmnetwork
 // All ads are clickable (opens in new tab on click)
@@ -121,7 +122,10 @@ function App() {
   const createSession = useCallback(async () => {
     try {
       console.log('[DEBUG] Creating session with API URL:', apiUrl);
-      const res = await apiCall(`${apiUrl}/api/session`, { method: 'GET' });
+      const qs = fingerprintQuery();
+      const savedId = localStorage.getItem('spvb_session_id');
+      const sid = savedId ? `&sid=${encodeURIComponent(savedId)}` : '';
+      const res = await apiCall(`${apiUrl}/api/session${qs ? `?${qs}` : ''}${sid}`, { method: 'GET' });
       const data = await res.json();
       console.log('[DEBUG] Session response:', data);
       if (data.success) {
@@ -170,6 +174,33 @@ function App() {
       createSession();
     }
   }, [createSession]);
+
+  // Heartbeat: keeps the session alive while user is actively using the site.
+  // If the server says the session expired, a fresh one is created automatically.
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const beat = async () => {
+      try {
+        const res = await apiCall(`${apiUrl}/api/session/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          console.log('[DEBUG] Session expired on server, creating new one');
+          createSession();
+        }
+      } catch (error) {
+        // network error - retry on next beat
+      }
+    };
+
+    beat();
+    const interval = setInterval(beat, 60000);
+    return () => clearInterval(interval);
+  }, [sessionId, apiUrl, createSession]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -608,6 +639,7 @@ const manualDownload = useCallback(async () => {
 function LivePlayers() {
   const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
   const [count, setCount] = useState(5000);
+  const [visitors, setVisitors] = useState(0);
 
   useEffect(() => {
     const fetchPlayerCount = async () => {
@@ -616,7 +648,9 @@ function LivePlayers() {
         const data = await res.json();
         if (data.success) {
           const realUsers = data.stats.totalUsers || 0;
+          const realVisitors = data.stats.totalVisits || 0;
           setCount(5000 + realUsers);
+          setVisitors(realVisitors);
         }
       } catch (error) {
         setCount(5000);
@@ -632,6 +666,11 @@ function LivePlayers() {
     <div className="hero-live-players">
       <span className="live-dot"></span>
       <strong>{count.toLocaleString('en-US')}+</strong> Players Online Now
+      {visitors > 0 && (
+        <span className="hero-visitors">
+          &nbsp;·&nbsp;👥 {visitors.toLocaleString('en-US')} Visitors
+        </span>
+      )}
     </div>
   );
 }

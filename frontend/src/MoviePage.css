@@ -51,6 +51,11 @@
   box-shadow: 0 0 8px #66b3ff;
 }
 
+.movie-viewer-count .movie-visitors {
+  color: #67e8f9;
+  font-weight: 600;
+}
+
 .movie-header-actions {
   display: flex;
   gap: 8px;
