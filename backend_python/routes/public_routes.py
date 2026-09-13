@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import uuid
 import aiohttp
 import os
+from datetime import datetime, timedelta
 from ..services.session_service import SessionService
 from ..services.download_service import DownloadService
 from ..services.cleanup_service import CleanupService
@@ -19,6 +20,46 @@ session_service = SessionService()
 download_service = DownloadService()
 cleanup_service = CleanupService()
 db = MongoDBService()
+
+def _get_client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return (request.client.host if request.client else "") or ""
+
+def _is_private_ip(ip: str) -> bool:
+    if not ip or ip in ("127.0.0.1", "::1", "localhost"):
+        return True
+    return ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("172.1") or ip.startswith("169.254.")
+
+async def _geo_lookup(ip: str):
+    try:
+        clean = str(ip or "").replace("::ffff:", "").strip()
+        if _is_private_ip(clean):
+            return {"country": "Local", "region": "Local", "city": "Local"}
+        timeout = aiohttp.ClientTimeout(total=2.5)
+        async with aiohttp.ClientSession(timeout=timeout) as sess:
+            async with sess.get(
+                f"http://ip-api.com/json/{clean}?fields=status,country,regionName,city,lat,lon,isp,org,query"
+            ) as res:
+                if res.status != 200:
+                    return None
+                j = await res.json()
+                if j.get("status") != "success":
+                    return None
+                return {
+                    "country": j.get("country", ""),
+                    "region": j.get("regionName", ""),
+                    "city": j.get("city", ""),
+                    "lat": j.get("lat", 0),
+                    "lon": j.get("lon", 0),
+                    "isp": j.get("isp", ""),
+                    "org": j.get("org", ""),
+                    "ip": j.get("query", clean)
+                }
+    except Exception as e:
+        logger.warning(f"Geo lookup failed for {ip}: {str(e)}")
+        return None
 
 class SessionRequest(BaseModel):
     pass
@@ -47,19 +88,91 @@ async def health_check():
     }
 
 @router.get("/session")
-async def get_session():
+async def get_session(request: Request):
     try:
+        qp = request.query_params
+        sid = (qp.get("sid") or qp.get("session_id") or "").strip()
+        fingerprint = (qp.get("fingerprint") or "").strip()
+        ip = _get_client_ip(request)
+        now = datetime.utcnow()
+
+        def expires_iso():
+            return (datetime.utcnow() + timedelta(seconds=config.session_inactivity_timeout)).isoformat()
+
+        def reused_response(session_id):
+            return {"success": True, "session_id": session_id, "expires_at": expires_iso(), "reused": True}
+
+        # Reuse an existing live session if the client passes its session id
+        if sid:
+            existing = await db.find_active_session(sid)
+            if existing:
+                await db.refresh_session_activity(sid)
+                return reused_response(sid)
+
+        # Reuse the most recent live session with the same fingerprint (browser refresh)
+        if fingerprint:
+            reused = await db.find_active_session_by_fingerprint(fingerprint)
+            if reused:
+                await db.refresh_session_activity(reused)
+                return reused_response(reused)
+
+        # Flood guard: reuse the most recent live session from the same public IP,
+        # or from any IP when no fingerprint was sent (crawlers)
+        if not _is_private_ip(ip) or not fingerprint:
+            reused_ip = await db.find_active_session_by_ip(ip)
+            if reused_ip:
+                await db.refresh_session_activity(reused_ip)
+                return reused_response(reused_ip)
+
+        # Genuinely new session - create it and record a visit
         session_id = str(uuid.uuid4())
         session = await session_service.create_session(session_id)
-
-        return {
-            "success": True,
+        location = await _geo_lookup(ip) if not _is_private_ip(ip) else {"country": "Local", "region": "Local", "city": "Local"}
+        visit = {
+            "visit_id": session_id,
             "session_id": session_id,
-            "expires_at": session.get("expires_at")
+            "fingerprint": fingerprint,
+            "device_type": qp.get("device") or "",
+            "browser": qp.get("browser") or "",
+            "os": qp.get("os") or "",
+            "screen": qp.get("screen") or "",
+            "language": qp.get("language") or "",
+            "timezone": qp.get("timezone") or "",
+            "platform": qp.get("platform") or "",
+            "page": qp.get("page") or "",
+            "referrer": qp.get("referrer") or request.headers.get("referer") or "",
+            "user_agent": (qp.get("user_agent") or request.headers.get("user-agent") or "")[:300],
+            "ip": ip,
+            "location": location,
+            "visit_count": 1,
+            "first_seen": now,
+            "last_seen": now,
+            "created_at": now
         }
+        await db.record_visit(visit)
+        return {"success": True, "session_id": session_id, "expires_at": session.get("expires_at"), "reused": False}
     except Exception as e:
         logger.error(f"Session creation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/session/heartbeat")
+async def session_heartbeat(request: Request):
+    try:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        session_id = (payload or {}).get("session_id") or request.query_params.get("session_id")
+        if not session_id:
+            return {"success": False, "message": "session_id required"}
+        existing = await db.find_active_session(session_id)
+        if existing:
+            await db.refresh_session_activity(session_id)
+            return {"success": True, "session_id": session_id}
+        return {"success": False, "session_id": session_id}
+    except Exception as e:
+        logger.error(f"Heartbeat error: {str(e)}")
+        return {"success": False, "message": str(e)}
 
 @router.post("/metadata")
 async def get_metadata(request: MetadataRequest):

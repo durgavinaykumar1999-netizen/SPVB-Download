@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, Query
 from pydantic import BaseModel
 from typing import Optional
 from ..services.mongodb_service import MongoDBService
@@ -161,16 +161,39 @@ async def get_stats():
     """Get public stats (no auth required - used by the public hero/visitor counters)"""
     try:
         db._ensure_connected()
-        games = list(db.games.find({}))
-        movies = list(db.movies.find({}))
-        downloads = list(db.downloads.find({}))
-
+        total_visits, today_visits, active_users = await db.get_visit_stats()
         return {
             "success": True,
-            "totalGames": len(games),
-            "totalMovies": len(movies),
-            "totalDownloads": len(downloads)
+            "totalGames": len(list(db.games.find({}))),
+            "totalMovies": len(list(db.movies.find({}))),
+            "totalDownloads": len(list(db.downloads.find({}))),
+            "totalUsers": active_users,
+            "activeSessions": active_users,
+            "totalVisits": total_visits,
+            "todayVisits": today_visits
         }
     except Exception as e:
         logger.error(f"Failed to fetch stats: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch stats: {str(e)}")
+
+@router.get("/visits")
+async def get_admin_visits(limit: int = Query(50, ge=1, le=200), username: str = Depends(verify_admin_token)):
+    """Get visitor details + breakdown for the admin panel"""
+    try:
+        db._ensure_connected()
+        visits = await db.list_visits(limit)
+        total_visits, today_visits, active_users = await db.get_visit_stats()
+        return {
+            "success": True,
+            "visits": visits,
+            "totalVisits": total_visits,
+            "todayVisits": today_visits,
+            "activeUsers": active_users,
+            "deviceBreakdown": await db.visit_breakdown("device_type"),
+            "browserBreakdown": await db.visit_breakdown("browser"),
+            "page": 1,
+            "limit": limit
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch visits: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch visits: {str(e)}")

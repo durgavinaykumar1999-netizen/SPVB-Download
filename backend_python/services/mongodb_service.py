@@ -38,6 +38,8 @@ class MongoDBService:
         self.downloads = None
         self.games = None
         self.movies = None
+        self.visits = None
+        self.visit_counters = None
         self._connected = False
 
     def _ensure_connected(self):
@@ -56,6 +58,8 @@ class MongoDBService:
             self.downloads = self.db["downloads"]
             self.games = self.db["games"]
             self.movies = self.db["movies"]
+            self.visits = self.db["visits"]
+            self.visit_counters = self.db["visitCounters"]
             self._create_indexes()
             self._connected = True
             logger.info("MongoDB connected")
@@ -69,6 +73,10 @@ class MongoDBService:
             self.sessions.create_index("expires_at", expireAfterSeconds=0)
             self.downloads.create_index("download_id", unique=True)
             self.downloads.create_index("session_id")
+            self.visits.create_index("fingerprint")
+            self.visits.create_index("session_id")
+            self.visits.create_index("ip")
+            self.visits.create_index("last_seen")
             logger.info("MongoDB indexes created")
         except Exception as e:
             logger.error(f"Index creation error: {str(e)}")
@@ -207,3 +215,113 @@ class MongoDBService:
             )
         except Exception as e:
             logger.warning(f"Failed to update session activity: {str(e)}")
+
+    # ============ VISITOR / SESSION REUSE ============
+
+    async def find_active_session(self, session_id: str):
+        """Return serialized session if it exists and has not expired, else None."""
+        if not session_id:
+            return None
+        self._ensure_connected()
+        session = self.sessions.find_one({"session_id": session_id})
+        if not session:
+            return None
+        if datetime.utcnow() > (session.get("expires_at") or datetime.utcnow()):
+            return None
+        return serialize_doc(session)
+
+    def _recent_cutoff(self):
+        return datetime.utcnow() - timedelta(seconds=config.session_inactivity_timeout)
+
+    async def find_active_session_by_fingerprint(self, fingerprint: str):
+        """Reuse the most recent still-active session with the same fingerprint."""
+        if not fingerprint:
+            return None
+        self._ensure_connected()
+        recent = list(self.visits.find(
+            {"fingerprint": fingerprint, "last_seen": {"$gt": self._recent_cutoff()}}
+        ).sort("last_seen", -1).limit(5))
+        for v in recent:
+            session_id = v.get("session_id")
+            if not session_id:
+                continue
+            active = await self.find_active_session(session_id)
+            if active:
+                return session_id
+        return None
+
+    async def find_active_session_by_ip(self, ip: str):
+        """Reuse the most recent still-active session from the same IP (flood guard)."""
+        if not ip:
+            return None
+        self._ensure_connected()
+        recent = list(self.visits.find(
+            {"ip": ip, "last_seen": {"$gt": self._recent_cutoff()}}
+        ).sort("last_seen", -1).limit(5))
+        for v in recent:
+            session_id = v.get("session_id")
+            if not session_id:
+                continue
+            active = await self.find_active_session(session_id)
+            if active:
+                return session_id
+        return None
+
+    async def refresh_session_activity(self, session_id: str):
+        """Extend last_activity + expires_at on the session and its visit record."""
+        self._ensure_connected()
+        now = datetime.utcnow()
+        expires_at = now + timedelta(seconds=config.session_inactivity_timeout)
+        self.sessions.update_one(
+            {"session_id": session_id},
+            {"$set": {"last_activity": now, "expires_at": expires_at}}
+        )
+        self.visits.update_one(
+            {"session_id": session_id},
+            {"$set": {"last_seen": now}}
+        )
+
+    async def record_visit(self, visit: dict):
+        """Insert a visit + bump total/today counters."""
+        self._ensure_connected()
+        self.visits.insert_one(visit)
+        self.visit_counters.update_one(
+            {"_id": "total"},
+            {"$inc": {"count": 1}},
+            upsert=True
+        )
+        today_key = datetime.utcnow().strftime("%Y-%m-%d")
+        self.visit_counters.update_one(
+            {"_id": today_key},
+            {"$inc": {"count": 1}},
+            upsert=True
+        )
+
+    async def get_visit_stats(self):
+        """Return (total_visits, today_visits, active_users)."""
+        self._ensure_connected()
+        total_doc = self.visit_counters.find_one({"_id": "total"})
+        total = total_doc.get("count", 0) if total_doc else 0
+        today_key = datetime.utcnow().strftime("%Y-%m-%d")
+        today_doc = self.visit_counters.find_one({"_id": today_key})
+        today = today_doc.get("count", 0) if today_doc else 0
+        active = self.sessions.count_documents({"last_activity": {"$gt": self._recent_cutoff()}})
+        return total, today, active
+
+    async def list_visits(self, limit: int):
+        self._ensure_connected()
+        docs = list(self.visits.find({}).sort("last_seen", -1).limit(max(1, min(limit, 200))))
+        return [serialize_doc(d) for d in docs]
+
+    async def visit_breakdown(self, field: str):
+        self._ensure_connected()
+        pipe = [
+            {"$group": {"_id": f"${field}", "count": {"$sum": 1}}},
+            {"$sort": {"count": -1}}
+        ]
+        return [
+            {"device": d["_id"] or "Unknown", "count": d["count"]}
+            if field == "device_type" else
+            {"browser": d["_id"] or "Unknown", "count": d["count"]}
+            for d in self.visits.aggregate(pipe)
+        ]
