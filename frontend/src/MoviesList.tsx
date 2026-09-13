@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import './MoviesList.css';
 import ScrollingNotice from './ScrollingNotice';
-import { SmallBannerAd, MobileBannerAd } from './Ads';
+
 import LazyAdLoader from './components/LazyAdLoader';
 
 interface Movie {
