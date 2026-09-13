@@ -9,6 +9,12 @@ import MoviesList from './MoviesList';
 import MoviePage from './MoviePage';
 import { fingerprintQuery } from './fingerprint';
 
+// Session-creation guards: coalesce concurrent calls (React StrictMode double
+// effects, multiple beat failures) so a page can never spawn more than one
+// new session per minute, which previously caused unlimited sessions.
+let sessionInFlight: Promise<string | null> | null = null;
+let lastSessionCreateAt = 0;
+
 // Ad Networks: Highrevenueformat + Profitableratecpmnetwork
 // All ads are clickable (opens in new tab on click)
 // Ads show on download results pages (when metadata present) and history pages
@@ -119,29 +125,36 @@ function App() {
     return fetch(url, options);
   };
 
-  const createSession = useCallback(async () => {
-    try {
-      console.log('[DEBUG] Creating session with API URL:', apiUrl);
-      const qs = fingerprintQuery();
-      const savedId = localStorage.getItem('spvb_session_id');
-      const sid = savedId ? `&sid=${encodeURIComponent(savedId)}` : '';
-      const res = await apiCall(`${apiUrl}/api/session${qs ? `?${qs}` : ''}${sid}`, { method: 'GET' });
-      const data = await res.json();
-      console.log('[DEBUG] Session response:', data);
-      if (data.success) {
-        setSessionId(data.session_id);
-        localStorage.setItem('spvb_session_id', data.session_id);
-        push('✅ Session created');
-        console.log('[DEBUG] Session ID saved:', data.session_id);
-      } else {
-        push(`❌ Session failed: ${data.message || 'Unknown error'}`, 'error');
-        console.error('[DEBUG] Session error:', data);
-      }
-    } catch (error) {
-      push(`❌ Session failed: ${error}`, 'error');
-      console.error('[DEBUG] Session exception:', error);
+  const createSession = useCallback(async (): Promise<string | null> => {
+    if (sessionInFlight) return sessionInFlight;
+    if (Date.now() - lastSessionCreateAt < 60000) {
+      const saved = localStorage.getItem('spvb_session_id');
+      return saved || null;
     }
-  }, [apiUrl, push]);
+    lastSessionCreateAt = Date.now();
+    sessionInFlight = (async () => {
+      try {
+        const qs = fingerprintQuery();
+        const savedId = localStorage.getItem('spvb_session_id');
+        const sid = savedId ? `&sid=${encodeURIComponent(savedId)}` : '';
+        const res = await apiCall(`${apiUrl}/api/session${qs ? `?${qs}` : ''}${sid}`, { method: 'GET' });
+        const data = await res.json();
+        if (data.success) {
+          setSessionId(data.session_id);
+          localStorage.setItem('spvb_session_id', data.session_id);
+          return data.session_id;
+        }
+        console.error('[DEBUG] Session error:', data);
+        return null;
+      } catch (error) {
+        console.error('[DEBUG] Session exception:', error);
+        return null;
+      } finally {
+        sessionInFlight = null;
+      }
+    })();
+    return sessionInFlight;
+  }, [apiUrl]);
 
   const fetchDownloads = useCallback(async () => {
     if (!sessionId) return;

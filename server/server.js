@@ -108,6 +108,16 @@ const getClientIp = (req) => {
   return String(raw).replace('::ffff:', '');
 };
 
+// Local/private IPs are used for local development and shared testing, so the
+// IP-based session reuse fallback is skipped for them (keeps local browsers
+// distinguishable). Public IPs are the ones that get flooded by crawlers.
+const isPrivateIp = (ip) => {
+  const clean = String(ip || '').replace('::ffff:', '').trim();
+  return !clean || clean === '127.0.0.1' || clean === '::1' || clean === 'localhost' ||
+    clean.startsWith('192.168.') || clean.startsWith('10.') ||
+    clean.startsWith('172.1') || clean.startsWith('169.254.');
+};
+
 const toDateKey = (d) => d.toISOString().slice(0, 10);
 
 const detectDevice = (ua) => {
@@ -549,6 +559,28 @@ const findReusableSession = async (fingerprint) => {
   return null;
 };
 
+// Reuse the most recent still-active session from the same IP as a fallback.
+// Crawlers/bots typically send a brand-new fingerprint on every request, so
+// fingerprint matching alone cannot stop them from spawning unlimited sessions
+// from one IP. This bounds each public IP to a single live session.
+const findReusableSessionByIp = async (ip) => {
+  if (!ip || !visitsCollection || !sessionsCollection) return null;
+  const cutoff = new Date(Date.now() - SESSION_TIMEOUT_MS);
+  try {
+    const recent = await visitsCollection
+      .find({ ip, last_seen: { $gt: cutoff } })
+      .sort({ last_seen: -1 })
+      .limit(5)
+      .toArray();
+    for (const v of recent) {
+      if (!v.session_id) continue;
+      const active = await isActiveSession(v.session_id);
+      if (active) return active;
+    }
+  } catch (e) {}
+  return null;
+};
+
 // Push an activity + expiry refresh to in-memory session, MongoDB session and its visit record
 const refreshSession = async (sessionId, now, expiresAt) => {
   const mem = sessions.get(sessionId);
@@ -597,6 +629,18 @@ const createSessionHandler = async (req, res) => {
       return res.json({ success: true, session_id: reusable.session_id, expires_at: expiresAt.toISOString(), reused: true });
     }
 
+    // Fall back to the most recent active session from the same public IP.
+    // Skips private/local IPs so local testing still distinguishes browsers,
+    // and skips real fingerprint traffic on private hosts.
+    const ip = getClientIp(req);
+    if (!isPrivateIp(ip) || !info.fingerprint) {
+      const reusableByIp = await findReusableSessionByIp(ip);
+      if (reusableByIp) {
+        await refreshSession(reusableByIp.session_id, now, expiresAt);
+        return res.json({ success: true, session_id: reusableByIp.session_id, expires_at: expiresAt.toISOString(), reused: true });
+      }
+    }
+
     const sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
     const sessionRec = {
@@ -621,7 +665,6 @@ const createSessionHandler = async (req, res) => {
     }
 
     // Record visit (fingerprint + device/browser/OS + location)
-    const ip = getClientIp(req);
     const location = await geoLookup(ip);
     const userAgent = info.userAgent;
     const visitDoc = {
