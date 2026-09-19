@@ -11,7 +11,8 @@ export default function AdBanner({ adKey, width, height, className = '' }: AdBan
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
 
     // Set up ad options
     (window as any).atOptions = {
@@ -26,11 +27,11 @@ export default function AdBanner({ adKey, width, height, className = '' }: AdBan
     const script = document.createElement('script');
     script.src = `https://www.highrevenueformat.com/${adKey}/invoke.js`;
     script.async = true;
-    containerRef.current.appendChild(script);
+    container.appendChild(script);
 
     return () => {
-      if (containerRef.current) {
-        containerRef.current.innerHTML = '';
+      if (container) {
+        container.innerHTML = '';
       }
     };
   }, [adKey, width, height]);

@@ -130,7 +130,21 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
         ch.name.toLowerCase().replace(/\s+/g, '-') === directChannel.toLowerCase()
       );
       if (channel) {
-        playChannel(channel);
+        setSelectedChannel(channel);
+
+        const channelPath = channel.name.toLowerCase().replace(/\s+/g, '-');
+        window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
+
+        if (videoRef.current) {
+          videoRef.current.src = channel.url;
+          videoRef.current.play().catch(() => {
+            console.log('Playback failed');
+          });
+        }
+
+        if (isMobile()) {
+          setShowChannelList(false);
+        }
       }
     }
   }, [directChannel, channels]);
