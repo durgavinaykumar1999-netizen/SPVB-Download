@@ -137,31 +137,45 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
 
   // Auto-play direct channel from URL
   useEffect(() => {
-    if (directChannel && channels.length > 0) {
-      const normalizedDirectChannel = normalizeChannelName(directChannel);
+    if (!directChannel || channels.length === 0) return;
 
-      const channel = channels.find(ch =>
-        normalizeChannelName(ch.name) === normalizedDirectChannel
-      );
+    console.log('Auto-play triggered with directChannel:', directChannel);
 
-      if (channel) {
-        // Auto-select and play the channel
-        setSelectedChannel(channel);
+    const normalizedDirectChannel = normalizeChannelName(directChannel);
+    console.log('Normalized directChannel:', normalizedDirectChannel);
 
-        const channelPath = normalizeChannelName(channel.name);
-        window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
+    const channel = channels.find(ch => {
+      const normalizedChannelName = normalizeChannelName(ch.name);
+      console.log('Comparing:', normalizedChannelName, 'with', normalizedDirectChannel, 'Match:', normalizedChannelName === normalizedDirectChannel);
+      return normalizedChannelName === normalizedDirectChannel;
+    });
 
-        if (videoRef.current) {
-          videoRef.current.src = channel.url;
-          videoRef.current.play().catch(() => {
-            console.log('Playback failed');
-          });
-        }
+    if (channel) {
+      console.log('Found matching channel:', channel.name);
 
-        if (isMobile()) {
-          setShowChannelList(false);
-        }
+      // Auto-select the channel
+      setSelectedChannel(channel);
+
+      // Set search query to filter the list to this channel
+      setSearchQuery(channel.name);
+
+      // Update URL
+      const channelPath = normalizeChannelName(channel.name);
+      window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
+
+      // Auto-play
+      if (videoRef.current) {
+        videoRef.current.src = channel.url;
+        videoRef.current.play().catch(() => {
+          console.log('Playback failed');
+        });
       }
+
+      if (isMobile()) {
+        setShowChannelList(false);
+      }
+    } else {
+      console.log('Channel not found. Available channels:', channels.slice(0, 5).map(c => normalizeChannelName(c.name)));
     }
   }, [directChannel, channels, normalizeChannelName]);
 
