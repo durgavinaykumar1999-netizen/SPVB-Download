@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface Channel {
   name: string;
@@ -84,30 +84,42 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
     loadChannels();
   }, []);
 
-  // Filter channels
+  // Filter channels by search query and language
   useEffect(() => {
-    let filtered = channels;
+    let filtered = [...channels];
 
+    // Filter by language first
     if (selectedLanguage !== 'all') {
       filtered = filtered.filter(ch => ch.language === selectedLanguage);
     }
 
-    if (searchQuery) {
+    // Then filter by search query
+    if (searchQuery && searchQuery.trim().length > 0) {
+      const query = searchQuery.toLowerCase().trim();
       filtered = filtered.filter(ch =>
-        ch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (ch.country && ch.country.toLowerCase().includes(searchQuery.toLowerCase()))
+        ch.name.toLowerCase().includes(query) ||
+        (ch.country && ch.country.toLowerCase().includes(query))
       );
     }
 
     setFilteredChannels(filtered);
   }, [searchQuery, selectedLanguage, channels]);
 
+  // Normalize channel name for URL: lowercase, spaces to dashes, remove special chars
+  const normalizeChannelName = useCallback((name: string) =>
+    name.toLowerCase()
+      .replace(/\s+/g, '-')           // spaces to dashes
+      .replace(/[()]/g, '')            // remove parentheses
+      .replace(/-+/g, '-'),            // collapse multiple dashes
+    []
+  );
+
   // Play channel and update URL
   const playChannel = (channel: Channel) => {
     setSelectedChannel(channel);
 
     // Update URL for direct access
-    const channelPath = channel.name.toLowerCase().replace(/\s+/g, '-');
+    const channelPath = normalizeChannelName(channel.name);
     window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
 
     if (videoRef.current) {
@@ -126,13 +138,17 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
   // Auto-play direct channel from URL
   useEffect(() => {
     if (directChannel && channels.length > 0) {
+      const normalizedDirectChannel = normalizeChannelName(directChannel);
+
       const channel = channels.find(ch =>
-        ch.name.toLowerCase().replace(/\s+/g, '-') === directChannel.toLowerCase()
+        normalizeChannelName(ch.name) === normalizedDirectChannel
       );
+
       if (channel) {
+        // Auto-select and play the channel
         setSelectedChannel(channel);
 
-        const channelPath = channel.name.toLowerCase().replace(/\s+/g, '-');
+        const channelPath = normalizeChannelName(channel.name);
         window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
 
         if (videoRef.current) {
@@ -147,7 +163,7 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
         }
       }
     }
-  }, [directChannel, channels]);
+  }, [directChannel, channels, normalizeChannelName]);
 
   if (loading) {
     return (
