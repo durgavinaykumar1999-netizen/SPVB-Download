@@ -14,6 +14,14 @@ export default function AdBanner({ adKey, width, height, className = '' }: AdBan
     const container = containerRef.current;
     if (!container) return;
 
+    // Generate unique container ID
+    const containerId = `ad-container-${adKey}-${Math.random().toString(36).substr(2, 9)}`;
+    container.id = containerId;
+
+    // Register container with ad network
+    (window as any).atAsyncContainers = (window as any).atAsyncContainers || {};
+    (window as any).atAsyncContainers[adKey] = [containerId];
+
     // Set up ad options
     (window as any).atOptions = {
       key: adKey,
@@ -27,6 +35,7 @@ export default function AdBanner({ adKey, width, height, className = '' }: AdBan
     const script = document.createElement('script');
     script.src = `https://www.highrevenueformat.com/${adKey}/invoke.js`;
     script.async = true;
+    script.onerror = () => console.debug(`Ad failed to load: ${adKey}`);
     container.appendChild(script);
 
     return () => {
