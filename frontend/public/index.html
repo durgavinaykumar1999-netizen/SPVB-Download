@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#667eea" />
+    <meta
+      name="description"
+      content="Social Media Video Downloader - Download videos from YouTube, Instagram, Facebook, Twitter, TikTok"
+    />
+    <link rel="icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
+    <link rel="shortcut icon" href="%PUBLIC_URL%/logo.png" type="image/png" />
+    <title>SPVB - Social Media Video Downloader</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        background: #0B1220;
+        color: #F8FAFC;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        width: 100%;
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+
+      #root {
+        background: #0B1220;
+        min-height: 100vh;
+      }
+
+      /* LEFT SIDEBAR */
+      #ads-left {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 310px;
+        height: 100vh;
+        background: #0B1220;
+        border-right: 1px solid #1e3a5f;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 10px;
+        z-index: 97;
+      }
+
+      /* RIGHT SIDEBAR */
+      #ads-right {
+        position: fixed;
+        right: 0;
+        top: 0;
+        width: 310px;
+        height: 100vh;
+        background: #0B1220;
+        border-left: 1px solid #1e3a5f;
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding: 10px;
+        z-index: 97;
+      }
+
+      /* MAIN CONTENT */
+      #root {
+        margin-left: 330px;
+        margin-right: 330px;
+        padding: 20px;
+      }
+
+      /* AD SLOT STYLING */
+      .ad-slot {
+        margin: 10px 0;
+        min-height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+      }
+
+      /* SCROLLBAR */
+      #ads-left::-webkit-scrollbar,
+      #ads-right::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      #ads-left::-webkit-scrollbar-track,
+      #ads-right::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      #ads-left::-webkit-scrollbar-thumb,
+      #ads-right::-webkit-scrollbar-thumb {
+        background: #2563EB;
+        border-radius: 3px;
+      }
+
+      /* MOBILE RESPONSIVE - SHOW ADS ON MOBILE */
+      @media (max-width: 1400px) {
+        #ads-left {
+          width: 100% !important;
+          position: static !important;
+          height: auto !important;
+          border-right: none;
+          border-bottom: 1px solid #1e3a5f;
+          padding: 15px 10px !important;
+          z-index: 1;
+          display: block !important;
+          left: auto !important;
+          top: auto !important;
+          overflow: visible !important;
+        }
+        #ads-right {
+          width: 100% !important;
+          position: static !important;
+          height: auto !important;
+          border-left: none;
+          border-top: 1px solid #1e3a5f;
+          padding: 15px 10px !important;
+          z-index: 1;
+          display: block !important;
+          right: auto !important;
+          top: auto !important;
+          overflow: visible !important;
+        }
+        .ad-slot {
+          width: 100%;
+          max-width: 100%;
+        }
+        #root {
+          margin-left: 0 !important;
+          margin-right: 0 !important;
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+
+    <!-- LEFT SIDEBAR ADS -->
+    <div id="ads-left"></div>
+
+    <!-- MAIN APP -->
+    <div id="root"></div>
+
+    <!-- RIGHT SIDEBAR ADS -->
+    <div id="ads-right"></div>
+
+    <script>
+      window.loadAllAds = function() {
+        const isMobile = /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
+        const leftSidebar = document.getElementById('ads-left');
+        const rightSidebar = document.getElementById('ads-right');
+
+        if (isMobile) {
+          if (leftSidebar) leftSidebar.style.display = 'none';
+          if (rightSidebar) rightSidebar.style.display = 'none';
+          return;
+        }
+
+        if (leftSidebar) leftSidebar.style.display = 'block';
+        if (rightSidebar) rightSidebar.style.display = 'block';
+
+        // LEFT SIDEBAR - 3 ADS
+        if (leftSidebar && leftSidebar.innerHTML === '') {
+          // Ad 1: 300x250
+          var ad1 = document.createElement('div');
+          ad1.className = 'ad-slot';
+          ad1.innerHTML = '';
+          (function() {
+            window.atOptions = {
+              'key': 'a37057b57277f779aa7eb6c39d0ca6d0',
+              'format': 'iframe',
+              'height': 250,
+              'width': 300,
+              'params': {}
+            };
+            var script = document.createElement('script');
+            script.src = 'https://www.highrevenueformat.com/a37057b57277f779aa7eb6c39d0ca6d0/invoke.js';
+            script.async = true;
+            ad1.appendChild(script);
+          })();
+          leftSidebar.appendChild(ad1);
+
+          // Ad 2: 160x300
+          setTimeout(function() {
+            var ad2 = document.createElement('div');
+            ad2.className = 'ad-slot';
+            ad2.innerHTML = '';
+            (function() {
+              window.atOptions = {
+                'key': '8266d43ddb40fa7f697b88ce1986a7c1',
+                'format': 'iframe',
+                'height': 300,
+                'width': 160,
+                'params': {}
+              };
+              var script = document.createElement('script');
+              script.src = 'https://www.highrevenueformat.com/8266d43ddb40fa7f697b88ce1986a7c1/invoke.js';
+              script.async = true;
+              ad2.appendChild(script);
+            })();
+            leftSidebar.appendChild(ad2);
+          }, 300);
+
+          // Ad 3: 300x250
+          setTimeout(function() {
+            var ad3 = document.createElement('div');
+            ad3.className = 'ad-slot';
+            ad3.innerHTML = '';
+            (function() {
+              window.atOptions = {
+                'key': 'a37057b57277f779aa7eb6c39d0ca6d0',
+                'format': 'iframe',
+                'height': 250,
+                'width': 300,
+                'params': {}
+              };
+              var script = document.createElement('script');
+              script.src = 'https://www.highrevenueformat.com/a37057b57277f779aa7eb6c39d0ca6d0/invoke.js';
+              script.async = true;
+              ad3.appendChild(script);
+            })();
+            leftSidebar.appendChild(ad3);
+          }, 600);
+        }
+
+        // RIGHT SIDEBAR - 7 ADS
+        if (rightSidebar && rightSidebar.innerHTML === '') {
+          // Ad 1: 468x60
+          var ad4 = document.createElement('div');
+          ad4.className = 'ad-slot';
+          ad4.innerHTML = '';
+          (function() {
+            window.atOptions = {
+              'key': 'c51f0a9e64d78d55f75a4ccd8eedc96c',
+              'format': 'iframe',
+              'height': 60,
+              'width': 468,
+              'params': {}
+            };
+            var script = document.createElement('script');
+            script.src = 'https://www.highrevenueformat.com/c51f0a9e64d78d55f75a4ccd8eedc96c/invoke.js';
+            script.async = true;
+            ad4.appendChild(script);
+          })();
+          rightSidebar.appendChild(ad4);
+
+          // Ad 2: 160x600
+          setTimeout(function() {
+            var ad5 = document.createElement('div');
+            ad5.className = 'ad-slot';
+            ad5.innerHTML = '';
+            (function() {
+              window.atOptions = {
+                'key': '569093e60d83db368a64b41564e536e7',
+                'format': 'iframe',
+                'height': 600,
+                'width': 160,
+                'params': {}
+              };
+              var script = document.createElement('script');
+              script.src = 'https://www.highrevenueformat.com/569093e60d83db368a64b41564e536e7/invoke.js';
+              script.async = true;
+              ad5.appendChild(script);
+            })();
+            rightSidebar.appendChild(ad5);
+          }, 300);
+
+          // Ad 3: 320x50
+          setTimeout(function() {
+            var ad6 = document.createElement('div');
+            ad6.className = 'ad-slot';
+            ad6.innerHTML = '';
+            (function() {
+              window.atOptions = {
+                'key': '1029ff22b684cfa96772119d5a4a7e73',
+                'format': 'iframe',
+                'height': 50,
+                'width': 320,
+                'params': {}
+              };
+              var script = document.createElement('script');
+              script.src = 'https://www.highrevenueformat.com/1029ff22b684cfa96772119d5a4a7e73/invoke.js';
+              script.async = true;
+              ad6.appendChild(script);
+            })();
+            rightSidebar.appendChild(ad6);
+          }, 600);
+
+          // Ad 4: 728x90
+          setTimeout(function() {
+            var ad7 = document.createElement('div');
+            ad7.className = 'ad-slot';
+            ad7.innerHTML = '';
+            (function() {
+              window.atOptions = {
+                'key': 'e00807f9355f6f59d09b4cb9632b1930',
+                'format': 'iframe',
+                'height': 90,
+                'width': 728,
+                'params': {}
+              };
+              var script = document.createElement('script');
+              script.src = 'https://www.highrevenueformat.com/e00807f9355f6f59d09b4cb9632b1930/invoke.js';
+              script.async = true;
+              ad7.appendChild(script);
+            })();
+            rightSidebar.appendChild(ad7);
+          }, 900);
+
+          // Profitable Network Ad 1
+          setTimeout(function() {
+            var profAd1 = document.createElement('div');
+            profAd1.className = 'ad-slot';
+            var script = document.createElement('script');
+            script.src = 'https://pl31124194.profitableratecpmnetwork.com/95/d8/cf/95d8cf0051e91631d54da7bc56ecbca1.js';
+            script.async = true;
+            profAd1.appendChild(script);
+            rightSidebar.appendChild(profAd1);
+          }, 1200);
+
+          // Profitable Network Ad 2
+          setTimeout(function() {
+            var profAd2 = document.createElement('div');
+            profAd2.className = 'ad-slot';
+            var script = document.createElement('script');
+            script.src = 'https://pl31124195.profitableratecpmnetwork.com/0221bc3a4d9d8690c9c87b8d892de725/invoke.js';
+            script.async = true;
+            script.setAttribute('data-cfasync', 'false');
+            var container = document.createElement('div');
+            container.id = 'container-0221bc3a4d9d8690c9c87b8d892de725';
+            profAd2.appendChild(container);
+            profAd2.appendChild(script);
+            rightSidebar.appendChild(profAd2);
+          }, 1500);
+
+          // Profitable Network Ad 3
+          setTimeout(function() {
+            var profAd3 = document.createElement('div');
+            profAd3.className = 'ad-slot';
+            var script = document.createElement('script');
+            script.src = 'https://pl31124197.profitableratecpmnetwork.com/ed/81/a6/ed81a612a8e2f2946bf640986f3a2b90.js';
+            script.async = true;
+            profAd3.appendChild(script);
+            rightSidebar.appendChild(profAd3);
+          }, 1800);
+        }
+      };
+
+      // Load on page ready
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', window.loadAllAds);
+      } else {
+        window.loadAllAds();
+      }
+
+      // Reload on navigation
+      window.addEventListener('popstate', function() {
+        setTimeout(window.loadAllAds, 100);
+      });
+
+      const originalPushState = window.history.pushState;
+      window.history.pushState = function() {
+        originalPushState.apply(window.history, arguments);
+        setTimeout(window.loadAllAds, 100);
+      };
+
+      // Auto-reload periodically
+      setInterval(window.loadAllAds, 3000);
+    </script>
+  </body>
+</html>

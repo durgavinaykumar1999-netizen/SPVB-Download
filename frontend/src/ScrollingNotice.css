@@ -1,0 +1,65 @@
+/* Scrolling Notice - Simple Single Line */
+.scrolling-notice {
+  background: linear-gradient(135deg, rgba(17, 26, 46, 0.8), rgba(25, 35, 65, 0.8));
+  border-top: 1px solid rgba(239, 68, 68, 0.4);
+  border-bottom: 1px solid rgba(239, 68, 68, 0.4);
+  padding: 12px 20px;
+  overflow: hidden;
+  z-index: 10;
+  position: relative;
+}
+
+.scrolling-content {
+  display: flex;
+  gap: 40px;
+  animation: scroll-horizontal 30s linear infinite;
+  white-space: nowrap;
+}
+
+.scrolling-content span {
+  font-size: 13px;
+  color: #f8a5a5;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+@keyframes scroll-horizontal {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .scrolling-notice {
+    padding: 10px 16px;
+  }
+
+  .scrolling-content {
+    animation: scroll-horizontal 25s linear infinite;
+  }
+
+  .scrolling-content span {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .scrolling-notice {
+    padding: 8px 12px;
+  }
+
+  .scrolling-content {
+    animation: scroll-horizontal 20s linear infinite;
+    gap: 30px;
+  }
+
+  .scrolling-content span {
+    font-size: 11px;
+  }
+}

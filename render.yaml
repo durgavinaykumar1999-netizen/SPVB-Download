@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: spvb-downloader
+    runtime: python-3
+    region: oregon
+    plan: free
+    startCommand: python -m uvicorn backend_python.main:app --host 0.0.0.0 --port 10000
+    buildCommand: pip install -r backend_python/requirements.txt && cd frontend && npm install && npm run build
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        fromDatabase:
+          name: spvb-downloader
+          property: connectionString
+    autoDeploy: true
+    healthCheckPath: /api/health

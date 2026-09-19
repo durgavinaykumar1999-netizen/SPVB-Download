@@ -1,0 +1,1324 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import './App.css';
+import ScrollingNotice from './ScrollingNotice';
+import { AdGameBanner, SmallBannerAd, MobileBannerAd } from './Ads';
+import AdminLogin from './AdminLogin';
+import AdminPanel from './AdminPanel';
+import GamesList from './GamesList';
+import MoviesList from './MoviesList';
+import MoviePage from './MoviePage';
+import LiveTV from './components/LiveTV';
+import InitialMobileAds from './components/InitialMobileAds';
+import { fingerprintQuery } from './fingerprint';
+
+// Session-creation guards: coalesce concurrent calls (React StrictMode double
+// effects, multiple beat failures) so a page can never spawn more than one
+// new session per minute, which previously caused unlimited sessions.
+let sessionInFlight: Promise<string | null> | null = null;
+let lastSessionCreateAt = 0;
+
+// Ad Networks: Highrevenueformat + Profitableratecpmnetwork
+// All ads are clickable (opens in new tab on click)
+// Ads show on download results pages (when metadata present) and history pages
+const SHOW_THIRD_PARTY_ADS = true;
+
+interface Quality {
+  label: string;
+  value: number | string;
+}
+
+interface Metadata {
+  title: string;
+  duration: number;
+  thumbnail: string;
+  uploader?: string;
+  qualities: Quality[];
+  platform: string;
+  is_age_restricted?: boolean;
+}
+
+interface Download {
+  download_id: string;
+  status: string;
+  progress: number;
+  filename?: string;
+  error?: string;
+  url?: string;
+  quality?: string;
+  metadata?: Metadata;
+}
+
+interface HistoryItem {
+  id: string;
+  url: string;
+  title: string;
+  thumbnail: string;
+  platform: string;
+  quality: string;
+  downloadedAt: number;
+  metadata?: Metadata;
+}
+
+const PLATFORMS = [
+  { id: 'instagram', name: 'Instagram', color: '#E1306C', icon: '◎' },
+  { id: 'facebook', name: 'Facebook', color: '#1877F2', icon: 'f' },
+  { id: 'tiktok', name: 'TikTok', color: '#000000', icon: '♪' },
+  { id: 'twitter', name: 'X', color: '#FFFFFF', icon: '𝕏' },
+];
+
+const sanitizeFilename = (filename: string): string => {
+  return filename
+    .replace(/[/\\?%*:|"<>]/g, '-')
+    .replace(/\s+/g, '_')
+    .substring(0, 200);
+};
+
+const detectPlatform = (url: string): string | null => {
+  const u = url.toLowerCase();
+  if (u.includes('instagram.com')) return 'Instagram';
+  if (u.includes('facebook.com') || u.includes('fb.watch')) return 'Facebook';
+  if (u.includes('tiktok.com')) return 'TikTok';
+  if (u.includes('twitter.com') || u.includes('x.com')) return 'X (Twitter)';
+  return null;
+};
+
+const isValidUrl = (str: string): boolean => {
+  try {
+    const u = new URL(str);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
+function useToasts() {
+  const [toasts, setToasts] = useState<any[]>([]);
+  const push = useCallback((msg: string, type = 'success') => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, msg, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+  }, []);
+  return { toasts, push };
+}
+
+function App() {
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+  const { toasts, push } = useToasts();
+
+  const [sessionId, setSessionId] = useState<string>('');
+  const [url, setUrl] = useState<string>('');
+  const [metadata, setMetadata] = useState<Metadata | null>(null);
+  const [selectedQuality, setSelectedQuality] = useState<string | number>('best');
+  const [downloads, setDownloads] = useState<Download[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
+  const [phase, setPhase] = useState<'idle' | 'loading' | 'result' | 'error'>('idle');
+  const [downloadState, setDownloadState] = useState<string | null>(null);
+  const [completedDownload, setCompletedDownload] = useState<Download | null>(null);
+  const [showLiveTV, setShowLiveTV] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [validation, setValidation] = useState<string | null>(null);
+  const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
+  const metadataLoadTimeRef = useRef<number>(0);  // Track when metadata was loaded
+  const currentDownloadInitiatedRef = useRef<boolean>(false);  // Track if user clicked Download for current metadata
+
+  const isMobile = () => /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
+
+  const apiCall = async (url: string, options: RequestInit = {}): Promise<Response> => {
+    return fetch(url, options);
+  };
+
+  const createSession = useCallback(async (): Promise<string | null> => {
+    if (sessionInFlight) return sessionInFlight;
+    if (Date.now() - lastSessionCreateAt < 60000) {
+      const saved = localStorage.getItem('spvb_session_id');
+      return saved || null;
+    }
+    lastSessionCreateAt = Date.now();
+    sessionInFlight = (async () => {
+      try {
+        const qs = fingerprintQuery();
+        const savedId = localStorage.getItem('spvb_session_id');
+        const sid = savedId ? `&sid=${encodeURIComponent(savedId)}` : '';
+        const res = await apiCall(`${apiUrl}/api/session${qs ? `?${qs}` : ''}${sid}`, { method: 'GET' });
+        const data = await res.json();
+        if (data.success) {
+          setSessionId(data.session_id);
+          localStorage.setItem('spvb_session_id', data.session_id);
+          return data.session_id;
+        }
+        console.error('[DEBUG] Session error:', data);
+        return null;
+      } catch (error) {
+        console.error('[DEBUG] Session exception:', error);
+        return null;
+      } finally {
+        sessionInFlight = null;
+      }
+    })();
+    return sessionInFlight;
+  }, [apiUrl]);
+
+  const fetchDownloads = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const res = await apiCall(`${apiUrl}/api/downloads?session_id=${sessionId}`);
+      const data = await res.json();
+      if (data.success) {
+        setDownloads(data.downloads);
+      }
+    } catch (error) {
+      console.error('Failed to fetch downloads:', error);
+    }
+  }, [sessionId, apiUrl]);
+
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem('spvb_session_id');
+    const savedHistory = localStorage.getItem('spvb_download_history');
+
+    if (savedHistory) {
+      try {
+        setHistory(JSON.parse(savedHistory));
+      } catch (e) {
+        console.error('Failed to parse history:', e);
+      }
+    }
+
+    if (savedSessionId) {
+      setSessionId(savedSessionId);
+    } else {
+      createSession();
+    }
+  }, [createSession]);
+
+  // Heartbeat: keeps the session alive while user is actively using the site.
+  // If the server says the session expired, a fresh one is created automatically.
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const beat = async () => {
+      try {
+        const res = await apiCall(`${apiUrl}/api/session/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sessionId }),
+        });
+        const data = await res.json();
+        if (!data.success) {
+          console.log('[DEBUG] Session expired on server, creating new one');
+          createSession();
+        }
+      } catch (error) {
+        // network error - retry on next beat
+      }
+    };
+
+    beat();
+    const interval = setInterval(beat, 60000);
+    return () => clearInterval(interval);
+  }, [sessionId, apiUrl, createSession]);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    const interval = setInterval(() => {
+      fetchDownloads();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [sessionId, fetchDownloads]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!url) {
+      setValidation(null);
+      setMetadata(null);        // Clear metadata when URL is cleared
+      setDownloadState(null);   // Clear download state when URL is cleared
+      setCompletedDownload(null); // Clear completed download
+      setPhase('idle');
+      return;
+    }
+    debounceRef.current = setTimeout(() => {
+      if (!isValidUrl(url)) {
+        setValidation('invalid');
+        return;
+      }
+      const platform = detectPlatform(url);
+      setValidation(platform ? 'valid' : 'unsupported');
+      // Clear previous download state and metadata when URL changes
+      setMetadata(null);
+      setDownloadState(null);   // IMPORTANT: Reset download state for new URL
+      setCompletedDownload(null); // Clear any previous download result
+      currentDownloadInitiatedRef.current = false;  // Reset download initiation flag
+      setPhase('idle');
+    }, 350);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [url]);
+
+  useEffect(() => {
+    if (!isMobile()) return;
+
+    const handleLinkClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest('a[href]') as HTMLAnchorElement | null;
+
+      if (!link) return;
+
+      const href = link.getAttribute('href');
+      const isExternal = href && (href.startsWith('http') || href.startsWith('//'));
+
+      if (isExternal && href) {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    };
+
+    const handlePopstate = (e: PopStateEvent) => {
+      e.preventDefault();
+      window.history.forward();
+    };
+
+    document.addEventListener('click', handleLinkClick, true);
+    window.addEventListener('popstate', handlePopstate);
+
+    return () => {
+      document.removeEventListener('click', handleLinkClick, true);
+      window.removeEventListener('popstate', handlePopstate);
+    };
+  }, []);
+
+  const fetchMetadata = async () => {
+    if (!url) {
+      push('❌ Please enter a URL', 'error');
+      return;
+    }
+    if (!sessionId) {
+      push('⏳ Creating session... Please try again', 'error');
+      return;
+    }
+
+    // IMPORTANT: Always fetch fresh metadata for new URL (don't use cache)
+    // Cache was causing old Instagram metadata to show for new YouTube URL
+    // Clear previous metadata and state for new URL
+    setMetadata(null);
+    setDownloadState(null);     // Reset download state when fetching new metadata
+    setCompletedDownload(null); // Clear previous download result
+    currentDownloadInitiatedRef.current = false;  // Reset download initiation flag
+    setPhase('loading');
+
+    try {
+      const res = await apiCall(`${apiUrl}/api/metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          session_id: sessionId,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Cache new metadata
+        metadataCacheRef.current[url] = data.metadata;
+        metadataLoadTimeRef.current = Date.now();  // Record when metadata was loaded
+        setMetadata(data.metadata);
+        setSelectedQuality(data.metadata.qualities[0]?.value?.toString() || 'best');
+        setPhase('result');
+        push('✅ Video information retrieved.');
+      } else {
+        setPhase('error');
+        push(`❌ ${data.message || 'Failed'}`, 'error');
+      }
+    } catch (error) {
+      setPhase('error');
+      push(`❌ Error: ${error}`, 'error');
+    }
+  };
+
+const manualDownload = useCallback(async () => {
+    if (!sessionId || !completedDownload) return;
+    push('⬇️ Downloading video...');
+    try {
+      const res = await apiCall(`${apiUrl}/api/download/${completedDownload.download_id}/auto-download?session_id=${sessionId}`);
+      if (!res.ok) throw new Error('Download failed');
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const title = completedDownload.metadata?.title || metadata?.title || 'video';
+      link.download = `${sanitizeFilename(title)}.mp4`;
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+      }, 100);
+      push('✅ Video downloaded!');
+    } catch (error) {
+      push(`❌ Download failed: ${error}`, 'error');
+    }
+  }, [apiUrl, sessionId, push, completedDownload, metadata]);
+
+  useEffect(() => {
+    // CRITICAL: Only show download state if user clicked Download for CURRENT metadata
+    // Don't show old "100%" from previous videos
+    if (!metadata || !url || !currentDownloadInitiatedRef.current) {
+      return;  // Don't show any download progress if user hasn't clicked Download yet
+    }
+
+    if (downloads.length === 0) {
+      return;
+    }
+
+    // Get the most recent download
+    const latestDownload = downloads[downloads.length - 1];
+
+    if (latestDownload) {
+      if (latestDownload.status === 'downloading') {
+        const progress = latestDownload.progress || 0;
+        setDownloadState(`downloading_${progress}`);
+      } else if (latestDownload.status === 'completed') {
+        setDownloadState('complete');
+        setCompletedDownload(latestDownload);
+
+        // Save to history
+        const historyItem: HistoryItem = {
+          id: latestDownload.download_id,
+          url: url || '',
+          title: metadata?.title || 'Unknown Video',
+          thumbnail: metadata?.thumbnail || '',
+          platform: metadata?.platform || 'Unknown',
+          quality: typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality,
+          downloadedAt: Date.now(),
+          metadata: metadata || undefined,
+        };
+        setHistory(prev => {
+          if (prev.some(h => h.id === latestDownload.download_id)) return prev;
+          const updated = [historyItem, ...prev];
+          localStorage.setItem('spvb_download_history', JSON.stringify(updated));
+          return updated;
+        });
+      } else if (latestDownload.status === 'failed') {
+        setDownloadState(null);
+        push(`❌ Download error: ${latestDownload.error}`, 'error');
+      }
+    }
+  }, [downloads, push, url, metadata, selectedQuality]);
+
+  const startDownload = async () => {
+    if (!url || !sessionId) {
+      push('❌ Please enter URL', 'error');
+      return;
+    }
+
+    // Mark that user initiated download for current metadata
+    currentDownloadInitiatedRef.current = true;
+    setDownloadState('preparing');
+    setCompletedDownload(null);
+    try {
+      const qualityStr = typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality;
+      const res = await apiCall(`${apiUrl}/api/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          session_id: sessionId,
+          quality: qualityStr,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        push('⏳ Downloading...');
+        fetchDownloads();
+      } else {
+        push(`❌ ${data.message || 'Failed'}`, 'error');
+        setDownloadState(null);
+      }
+    } catch (error) {
+      push(`❌ Error: ${error}`, 'error');
+      setDownloadState(null);
+    }
+  };
+
+  const handleDownload = () => {
+    if (downloadState === 'complete' && completedDownload) {
+      manualDownload();
+    } else {
+      startDownload();
+    }
+  };
+
+  const redownloadFromHistory = async (item: HistoryItem) => {
+    try {
+      const download = downloads.find(d => d.download_id === item.id);
+      if (download) {
+        const res = await apiCall(`${apiUrl}/api/download/${item.id}/stream?session_id=${sessionId}`);
+        if (!res.ok) throw new Error('Download failed');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${sanitizeFilename(item.title)}.mp4`;
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(link);
+        }, 100);
+        push('✅ Download complete!');
+      }
+    } catch (error) {
+      push(`❌ Download failed: ${error}`, 'error');
+    }
+  };
+
+  const deleteFromHistory = (id: string) => {
+    const newHistory = history.filter(h => h.id !== id);
+    setHistory(newHistory);
+    localStorage.setItem('spvb_download_history', JSON.stringify(newHistory));
+    push('✅ Removed from history');
+  };
+
+
+  const handlePaste = async () => {
+    if (url) {
+      setUrl('');
+      return;
+    }
+    try {
+      const text = await navigator.clipboard.readText();
+      setUrl(text);
+      push('✅ URL pasted');
+    } catch {
+      push('❌ Unable to access clipboard', 'error');
+    }
+  };
+
+  const msg = {
+    empty: { t: 'Please enter a video URL.', c: 'var(--danger)' },
+    invalid: { t: 'Please enter a valid URL.', c: 'var(--danger)' },
+    unsupported: { t: 'This platform is currently not supported.', c: 'var(--warning)' },
+    valid: { t: '✓ URL recognized', c: 'var(--success)' },
+  }[validation || ''] || null;
+
+  const [showGame, setShowGame] = useState(false);
+  const [adminToken, setAdminToken] = useState(localStorage.getItem('admin_token') || null);
+
+  const pathname = window.location.pathname;
+  const isAdminRoute = pathname.startsWith('/admin');
+  const isGameRoute = pathname.startsWith('/play/');
+  const isGamesListRoute = pathname === '/play';
+  const isMovieRoute = pathname.startsWith('/watch/');
+  const isMoviesListRoute = pathname === '/watch';
+  const isLiveTVRoute = pathname.startsWith('/livetv/');
+  const isLiveTVListRoute = pathname === '/livetv';
+
+  // Admin route
+  if (isAdminRoute) {
+    if (!adminToken) {
+      return <AdminLogin onLogin={(token) => {
+        setAdminToken(token);
+        localStorage.setItem('admin_token', token);
+      }} />;
+    }
+    return <AdminPanel token={adminToken} onLogout={() => {
+      setAdminToken(null);
+      localStorage.removeItem('admin_token');
+      window.location.href = '/';
+    }} />;
+  }
+
+  // Games list route
+  if (isGamesListRoute) {
+    return <GamesList onSelectGame={(game) => {
+      window.location.href = `/play/${game.id}`;
+    }} />;
+  }
+
+  // Game detail route
+  if (isGameRoute || showGame) {
+    return <GamePage onClose={() => setShowGame(false)} />;
+  }
+
+  // Live TV list route
+  if (isLiveTVListRoute) {
+    return <LiveTV onClose={() => window.location.href = '/'} />;
+  }
+
+  // Live TV channel direct route (e.g., /livetv/bbc-news)
+  if (isLiveTVRoute) {
+    const channelName = pathname.split('/livetv/')[1];
+    return <LiveTV onClose={() => window.location.href = '/livetv'} directChannel={decodeURIComponent(channelName)} />;
+  }
+
+  // Live TV button click
+  if (showLiveTV) {
+    return <LiveTV onClose={() => setShowLiveTV(false)} />;
+  }
+
+  // Movies list route
+  if (isMoviesListRoute) {
+    return <MoviesList onSelectMovie={(movie) => {
+      window.location.href = `/watch/${movie.id}`;
+    }} />;
+  }
+
+  // Movie detail route
+  if (isMovieRoute) {
+    return <MoviePage onClose={() => {}} />;
+  }
+
+  return (
+    <div className="app">
+      <div className="bg-grid"></div>
+      <div className="bg-blob blob1"></div>
+      <div className="bg-blob blob2"></div>
+
+      {/* INITIAL MOBILE ADS - ONLY ON PAGE LOAD */}
+      <InitialMobileAds />
+
+      <ToastStack toasts={toasts} />
+
+      <div style={{ position: 'relative', zIndex: 2, background: 'transparent' }}>
+        <header className="header">
+          <div className="logo-section">
+            <img src="logo.png" alt="SPVB" className="logo-img" />
+            <span className="logo-text">SPVB</span>
+          </div>
+          <nav>
+            <a href="/play" className="nav-btn games-btn" style={{ textDecoration: 'none' }}>
+              <span>🎮</span> Games
+            </a>
+            <a href="/watch" className="nav-btn movies-btn" style={{ textDecoration: 'none' }}>
+              <span>🎬</span> Movies
+            </a>
+            <button
+              className="nav-btn"
+              onClick={() => setShowLiveTV(true)}
+              style={{ cursor: 'pointer' }}
+            >
+              <span>📺</span> Live TV
+            </button>
+            <button className="nav-btn">
+              <span>?</span> How it works
+            </button>
+            <div className="profile-avatar">D</div>
+          </nav>
+        </header>
+
+        <section className="hero-section">
+          <h1>
+            <span className="gradient-text">SPVB</span> Downloader
+          </h1>
+          <p>Download and process videos from your favorite platforms with speed and security.</p>
+          <PlatformBadges />
+          <LivePlayers />
+        </section>
+
+        <section className="main-content">
+            <div className="content-layout">
+            {/* Left Main Content */}
+            <div className="content-main">
+
+            {SHOW_THIRD_PARTY_ADS && <SmallBannerAd />}
+            <div className="tabs-container">
+              <button
+                className={`tab ${activeTab === 'download' ? 'active' : ''}`}
+                onClick={() => setActiveTab('download')}
+              >
+                ⬇️ Download
+              </button>
+              <button
+                className={`tab ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                📋 History ({history.length})
+              </button>
+            </div>
+
+            {activeTab === 'download' ? (
+              <div className="download-section">
+                <DownloaderCard
+                  url={url}
+                  setUrl={setUrl}
+                  validation={validation}
+                  msg={msg}
+                  loading={phase === 'loading'}
+                  onGetInfo={fetchMetadata}
+                  onPaste={handlePaste}
+                />
+
+                {phase === 'idle' && <EmptyState />}
+                {phase === 'error' && <ErrorCard onRetry={() => setPhase('idle')} />}
+                {phase === 'result' && metadata && (
+                  <ResultCard
+                    data={metadata}
+                    selectedQuality={selectedQuality}
+                    setSelectedQuality={setSelectedQuality}
+                    onDownload={handleDownload}
+                    downloadState={downloadState}
+                  />
+                )}
+              </div>
+            ) : (
+              <HistorySection history={history} onRedownload={redownloadFromHistory} onDelete={deleteFromHistory} />
+            )}
+            </div>
+            </div>
+        </section>
+
+        {/* ADS BETWEEN METADATA & FOOTER */}
+        {phase === 'result' && metadata && (
+          <section className="ads-metadata-section" style={{
+            padding: '20px 16px',
+            textAlign: 'center',
+            background: 'linear-gradient(135deg, rgba(11, 18, 32, 0.5), rgba(17, 26, 46, 0.5))',
+            borderTop: '1px solid rgba(37, 99, 235, 0.2)',
+            borderBottom: '1px solid rgba(37, 99, 235, 0.2)',
+            margin: '20px 0',
+            width: '100%'
+          }}>
+            <div id="metadata-ads-container" style={{
+              maxWidth: '900px',
+              margin: '0 auto',
+              display: 'flex',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              gap: '15px'
+            }}>
+              {/* Ad 1: 320x50 Mobile / 468x60 Desktop */}
+              <div style={{ minHeight: '70px', width: '100%' }}>
+                <script dangerouslySetInnerHTML={{__html: `
+                  window.atOptions = {
+                    'key': '1029ff22b684cfa96772119d5a4a7e73',
+                    'format': 'iframe',
+                    'height': 50,
+                    'width': 320,
+                    'params': {}
+                  };
+                `}} />
+                <script src="https://www.highrevenueformat.com/1029ff22b684cfa96772119d5a4a7e73/invoke.js" async={true} />
+              </div>
+
+              {/* Ad 2: 300x250 */}
+              <div style={{ minHeight: '260px' }}>
+                <script dangerouslySetInnerHTML={{__html: `
+                  window.atOptions = {
+                    'key': 'a37057b57277f779aa7eb6c39d0ca6d0',
+                    'format': 'iframe',
+                    'height': 250,
+                    'width': 300,
+                    'params': {}
+                  };
+                `}} />
+                <script src="https://www.highrevenueformat.com/a37057b57277f779aa7eb6c39d0ca6d0/invoke.js" async={true} />
+              </div>
+
+              {/* Ad 3: 728x90 Desktop only */}
+              <div style={{ minHeight: '100px', width: '100%', display: 'none' }}>
+                <script dangerouslySetInnerHTML={{__html: `
+                  window.atOptions = {
+                    'key': 'e00807f9355f6f59d09b4cb9632b1930',
+                    'format': 'iframe',
+                    'height': 90,
+                    'width': 728,
+                    'params': {}
+                  };
+                `}} />
+                <script src="https://www.highrevenueformat.com/e00807f9355f6f59d09b4cb9632b1930/invoke.js" async={true} />
+              </div>
+
+              {/* Ad 4: 160x300 Mobile */}
+              <div style={{ minHeight: '310px' }}>
+                <script dangerouslySetInnerHTML={{__html: `
+                  window.atOptions = {
+                    'key': '8266d43ddb40fa7f697b88ce1986a7c1',
+                    'format': 'iframe',
+                    'height': 300,
+                    'width': 160,
+                    'params': {}
+                  };
+                `}} />
+                <script src="https://www.highrevenueformat.com/8266d43ddb40fa7f697b88ce1986a7c1/invoke.js" async={true} />
+              </div>
+
+              {/* Ad 5: 468x60 */}
+              <div style={{ minHeight: '70px', width: '100%' }}>
+                <script dangerouslySetInnerHTML={{__html: `
+                  window.atOptions = {
+                    'key': 'c51f0a9e64d78d55f75a4ccd8eedc96c',
+                    'format': 'iframe',
+                    'height': 60,
+                    'width': 468,
+                    'params': {}
+                  };
+                `}} />
+                <script src="https://www.highrevenueformat.com/c51f0a9e64d78d55f75a4ccd8eedc96c/invoke.js" async={true} />
+              </div>
+            </div>
+          </section>
+        )}
+
+        {SHOW_THIRD_PARTY_ADS && <MobileBannerAd />}
+        <Features />
+        <ScrollingNotice />
+        <Footer />
+      </div>
+    </div>
+  );
+}
+
+
+function LivePlayers() {
+  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+  const [count, setCount] = useState(4950);
+
+  useEffect(() => {
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+    let isMounted = true;
+
+    const fetchVisitorCount = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/visitor-count`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && isMounted) {
+            // Base 4950 + active players now
+            const baseCount = 4950;
+            const activeNow = Math.max(1, data.active_now);
+            setCount(baseCount + activeNow);
+          }
+        } else if (isMounted) {
+          setCount(4950);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setCount(4950);
+        }
+      }
+    };
+
+    fetchVisitorCount();
+    const interval = setInterval(fetchVisitorCount, 10000); // Update every 10 seconds
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  return (
+    <div className="hero-live-players">
+      <span className="live-dot"></span>
+      <strong>{count.toLocaleString('en-US')}+</strong> Players Online Now
+    </div>
+  );
+}
+
+function PlatformBadges() {
+  return (
+    <div className="platform-badges">
+      {PLATFORMS.map(p => (
+        <div key={p.id} className="badge">
+          <span style={{ color: p.color === '#FFFFFF' ? 'white' : p.color }}>{p.icon}</span>
+          {p.name}
+        </div>
+      ))}
+      <button className="badge more-btn">⋯ More</button>
+    </div>
+  );
+}
+
+
+function DownloaderCard({ url, setUrl, validation, msg, loading, onGetInfo, onPaste }: any) {
+  return (
+    <div className="downloader-card">
+      <div className="input-wrapper">
+        <span className="input-icon">🔗</span>
+        <input
+          value={url}
+          onChange={e => setUrl(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && onGetInfo()}
+          placeholder="Paste video URL here..."
+          className="url-input"
+          style={{
+            borderColor:
+              validation === 'invalid' || validation === 'empty'
+                ? 'rgba(239,68,68,0.5)'
+                : validation === 'valid'
+                ? 'rgba(34,197,94,0.5)'
+                : validation === 'unsupported'
+                ? 'rgba(245,158,11,0.5)'
+                : 'var(--border)',
+          }}
+        />
+        <button onClick={onPaste} className="paste-btn">
+          {url ? 'Clear' : 'Paste'}
+        </button>
+      </div>
+      <button onClick={onGetInfo} disabled={loading} className="btn-primary">
+        {loading ? (
+          <>
+            <span className="spinner"></span>Analyzing…
+          </>
+        ) : (
+          <>🔍 Get Info</>
+        )}
+      </button>
+      {msg && <div style={{ color: msg.c, marginTop: 10 }}>{msg.t}</div>}
+      {loading && <div className="scan-bar"></div>}
+    </div>
+  );
+}
+
+function ResultCard({ data, selectedQuality, setSelectedQuality, onDownload, downloadState }: any) {
+  return (
+    <div className="result-card">
+      <div className="thumbnail-area">
+        {data.thumbnail ? (
+          <img src={data.thumbnail} alt={data.title} />
+        ) : (
+          <div className="thumbnail-placeholder">🎞️</div>
+        )}
+        <div className="play-button">▶</div>
+        <span className="duration">{Math.floor(data.duration / 60)}:00</span>
+      </div>
+
+      <div className="result-content">
+        <h3>{data.title}</h3>
+        <div className="metadata-tags">
+          <span>📺 {data.platform}</span>
+          <span>⏱ {Math.floor(data.duration / 60)}m</span>
+          <span>👤 {data.uploader || 'Unknown'}</span>
+        </div>
+
+        <div className="quality-section">
+          <label>Available Qualities</label>
+          <div className="quality-buttons">
+            {data.qualities.map((q: Quality) => (
+              <button
+                key={q.value}
+                onClick={() => setSelectedQuality(q.value)}
+                className={`quality-btn ${selectedQuality === q.value ? 'active' : ''}`}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={onDownload} disabled={downloadState?.startsWith('downloading') || downloadState === 'preparing'} className="btn-download">
+          {downloadState === 'preparing' ? (
+            <>
+              <span className="spinner"></span>⏳ Preparing…
+            </>
+          ) : downloadState?.startsWith('downloading') ? (
+            <>
+              <span className="spinner"></span>⬇️ {downloadState.split('_')[1] || '0'}%
+            </>
+          ) : downloadState === 'complete' ? (
+            <>✅ Completed</>
+          ) : (
+            <>⬇️ Download {typeof selectedQuality === 'number' ? `${selectedQuality}p` : selectedQuality}</>
+          )}
+        </button>
+
+        {downloadState === 'downloading' && <div className="progress-bar"></div>}
+      </div>
+    </div>
+  );
+}
+
+function ErrorCard({ onRetry }: any) {
+  return (
+    <div className="error-card">
+      <div style={{ fontSize: 30, marginBottom: 10 }}>⚠</div>
+      <h3>Unable to process this URL</h3>
+      <p>We couldn't retrieve information from this link. Please check the URL and try again.</p>
+      <button onClick={onRetry} className="btn-secondary">Try Again</button>
+    </div>
+  );
+}
+
+function HistorySection({ history, onRedownload, onDelete }: any) {
+  return (
+    <div className="history-grid">
+      {history.length === 0 ? (
+        <div className="empty-history">
+          <p>📭 No downloads yet</p>
+        </div>
+      ) : (
+        history.map((item: HistoryItem) => (
+          <div key={item.id} className="history-card">
+            {item.thumbnail && <img src={item.thumbnail} alt={item.title} className="history-thumbnail" />}
+            <div className="history-info">
+              <h4>{item.title}</h4>
+              <p className="platform">{item.platform}</p>
+              <p className="quality">Quality: {item.quality}p</p>
+              <div className="history-actions">
+                <button onClick={() => onRedownload(item)} className="btn-small">⬇️ Redownload</button>
+                <button onClick={() => onDelete(item.id)} className="btn-small danger">🗑️</button>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="empty-state">
+      <div style={{ fontSize: 22, marginBottom: 8 }}>↓</div>
+      <p>Paste a video URL to get started</p>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>
+        You can analyze supported video links without creating an account.
+      </p>
+    </div>
+  );
+}
+
+function Features() {
+  const feats = [
+    { icon: '🛡', title: 'Secure & Private', sub: '100% safe, no data stored' },
+    { icon: '⚡', title: 'Lightning Fast', sub: 'Optimized for speed' },
+    { icon: '🌐', title: 'Multi Platform', sub: 'Support 100+ sites' },
+    { icon: '♥', title: 'User Friendly', sub: 'Simple & easy to use' },
+  ];
+
+  return (
+    <div className="features-section">
+      {feats.map(f => (
+        <div key={f.title} className="feature-item">
+          <div className="feature-icon">{f.icon}</div>
+          <div>
+            <div className="feature-title">{f.title}</div>
+            <div className="feature-sub">{f.sub}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Footer() {
+  const [modal, setModal] = useState<'privacy' | 'terms' | 'contact' | null>(null);
+
+  return (
+    <>
+      <footer className="footer">
+        <div className="footer-content">
+          <p className="footer-info">🔒 Session-based · Temporary processing · Auto cleanup · No login required</p>
+          <div className="footer-links">
+            <p>© 2026 SPVB Downloader. All rights reserved.</p>
+            <div className="footer-buttons">
+              <button onClick={() => setModal('privacy')} className="footer-link">Privacy Policy</button>
+              <span className="separator">·</span>
+              <button onClick={() => setModal('terms')} className="footer-link">Terms of Service</button>
+              <span className="separator">·</span>
+              <button onClick={() => setModal('contact')} className="footer-link">Contact Us</button>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {modal && (
+        <div className="modal-overlay" onClick={() => setModal(null)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+
+            {modal === 'privacy' && (
+              <div>
+                <h2>Privacy Policy</h2>
+                <div className="modal-body">
+                  <h3>1. Information We Collect</h3>
+                  <p>We collect session IDs and download history stored locally on your device. No personal data is stored on our servers.</p>
+
+                  <h3>2. How We Use Your Information</h3>
+                  <p>Session data is used to maintain your current session for up to 30 minutes. Download history is stored in your browser only.</p>
+
+                  <h3>3. Data Security</h3>
+                  <p>All communications are encrypted. We do not share any data with third parties.</p>
+
+                  <h3>4. Cookies</h3>
+                  <p>We use browser storage (localStorage) to save your session ID and download history. You can clear this anytime in browser settings.</p>
+
+                  <h3>5. Contact Us</h3>
+                  <p>For privacy concerns, please use our Contact Us form below.</p>
+                </div>
+              </div>
+            )}
+
+            {modal === 'terms' && (
+              <div>
+                <h2>Terms of Service</h2>
+                <div className="modal-body">
+                  <h3>1. Acceptance of Terms</h3>
+                  <p>By using SPVB Downloader, you agree to these terms and conditions. If you do not agree, please do not use our service.</p>
+
+                  <h3>2. Permitted Use</h3>
+                  <p>You may use this service for personal, non-commercial purposes only. Downloading copyrighted content without permission is prohibited.</p>
+
+                  <h3>3. User Responsibilities</h3>
+                  <p>You are responsible for ensuring that your use of our service complies with all applicable laws and regulations in your jurisdiction.</p>
+
+                  <h3>4. Disclaimer</h3>
+                  <p>This service is provided "as is" without warranties. We are not liable for any damages resulting from use or inability to use the service.</p>
+
+                  <h3>5. Termination</h3>
+                  <p>We reserve the right to terminate or restrict access to our service at any time.</p>
+
+                  <h3>6. Changes to Terms</h3>
+                  <p>We may update these terms at any time. Continued use constitutes acceptance of updated terms.</p>
+                </div>
+              </div>
+            )}
+
+            {modal === 'contact' && (
+              <div>
+                <h2>Contact Us - Educational Project</h2>
+                <div className="modal-body">
+                  <h3>Report Copyright or Issues</h3>
+                  <p>This is an educational project. If you have any concerns about copyright or third-party content, please contact us immediately.</p>
+
+                  <div className="contact-section">
+                    <h4>📧 Primary Contact Email</h4>
+                    <p><a href="mailto:vinaymail1820@gmail.com">vinaymail1820@gmail.com</a></p>
+                  </div>
+
+                  <div className="contact-section">
+                    <h4>ℹ️ Project Information</h4>
+                    <p>This is an <strong>Educational Initiative</strong> created for learning purposes only. We do not store any data on our servers. All game content is hosted on third-party servers.</p>
+                  </div>
+
+                  <div className="contact-section">
+                    <h4>⚖️ Copyright Claims</h4>
+                    <p>If you believe we are hosting copyrighted content without permission, please email us with:</p>
+                    <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+                      <li>Description of the copyrighted content</li>
+                      <li>Your ownership proof</li>
+                      <li>Specific URL(s) in question</li>
+                    </ul>
+                  </div>
+
+                  <div className="contact-section">
+                    <h4>⏱️ Response Time</h4>
+                    <p>We respond to copyright claims and inquiries within 24 hours.</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function GamePage({ onClose }: { onClose?: () => void } = {}) {
+  const [gameUrl, setGameUrl] = useState('');
+  const [gameName, setGameName] = useState('Game');
+  const [count, setCount] = useState(5000);
+  const [loaded, setLoaded] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchGameUrl = async () => {
+      try {
+        const pathname = window.location.pathname;
+        const gameId = pathname.split('/play/')[1];
+
+        if (!gameId) {
+          setGameUrl('');
+          return;
+        }
+
+        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+        const response = await fetch(`${apiUrl}/api/games/list`);
+        const data = await response.json();
+
+        if (data.success && data.games) {
+          const game = data.games.find((g: any) => g.id === gameId);
+          if (game) {
+            setGameUrl(game.url);
+            setGameName(game.name);
+          } else {
+            console.error('Game not found');
+            setGameUrl('');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch game:', err);
+        setGameUrl('');
+      }
+    };
+    fetchGameUrl();
+  }, []);
+
+  useEffect(() => {
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
+    let isMounted = true;
+
+    const fetchPlayerCount = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/visitor-count`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && isMounted) {
+            // Base 4900 + active players
+            const baseCount = 4900;
+            const activeNow = Math.max(1, data.active_now);
+            setCount(baseCount + activeNow);
+          }
+        } else if (isMounted) {
+          setCount(4900);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setCount(4900);
+        }
+      }
+    };
+
+    fetchPlayerCount();
+    const interval = setInterval(fetchPlayerCount, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent)) {
+      setControlsOpen(true);
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setControlsOpen(v => !v);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+
+  // Allow normal back button behavior - don't force redirects
+  // Users should be able to navigate freely
+
+  const toggleFullscreen = () => {
+    const el = document.querySelector('.game-frame');
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      (el as HTMLElement).requestFullscreen?.().catch(() => {});
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
+  const closeGame = () => {
+    window.location.href = '/play';
+  };
+
+  return (
+    <div className="game-page">
+      <div className="game-header">
+        <h1>{gameName}</h1>
+        <div className="game-player-count">
+          <span className="live-dot"></span>
+          <strong>{count.toLocaleString('en-US')}</strong> Playing
+        </div>
+        <div className="game-header-actions">
+          <button className="game-btn" onClick={() => setControlsOpen(v => !v)}>ℹ️ Controls</button>
+          <button className="game-btn green" onClick={toggleFullscreen}>⛶ Fullscreen</button>
+          <button className="game-btn red" onClick={closeGame}>✕ Close</button>
+        </div>
+      </div>
+
+      <div className="game-body">
+        {gameUrl ? (
+          <div className="game-frame">
+            <iframe
+              title="game"
+              src={gameUrl}
+              allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              onLoad={() => setLoaded(true)}
+            />
+            {!loaded && (
+              <div className="game-loading">
+                <div className="spinner"></div>
+                <p>Loading game...</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="game-coming-soon">
+            <div className="coming-soon-icon">🚧</div>
+            <h2>Coming Soon</h2>
+            <p>This game is not available yet. Please check back later.</p>
+            <a href="/play" className="game-btn light">🎮 Back to Games</a>
+          </div>
+        )}
+      </div>
+
+      {controlsOpen && gameUrl && (
+        <div className="game-controls-overlay">
+          <button className="close-btn-overlay" onClick={() => setControlsOpen(false)}>✕</button>
+
+          <strong>🖥️ Desktop Controls:</strong>
+          <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+            <span style={{ display: 'block' }}>⬆️ Arrow Keys - Move Up/Down/Left/Right</span>
+            <span style={{ display: 'block' }}>Space - Action / Jump</span>
+            <span style={{ display: 'block' }}>E - Enter Vehicle</span>
+            <span style={{ display: 'block' }}>WASD - Alternative Move</span>
+          </div>
+
+          <strong>📱 Mobile Controls:</strong>
+          <div style={{ lineHeight: '1.8', marginBottom: '15px', color: '#22D3EE' }}>
+            <span style={{ display: 'block' }}>👆 Touch & Tap - Interact with game</span>
+            <span style={{ display: 'block' }}>🔄 Swipe - Movement/Control</span>
+            <span style={{ display: 'block' }}>📌 Long Press - Secondary action</span>
+            <span style={{ display: 'block' }}>🔙 Tilt Device - Some games use gyro</span>
+          </div>
+
+          <strong>⌨️ General Controls:</strong>
+          <div style={{ lineHeight: '1.8' }}>
+            <span style={{ display: 'block' }}>F or ⛶ - Fullscreen Mode</span>
+            <span style={{ display: 'block' }}>ESC - Show/Hide This Help</span>
+            <span style={{ display: 'block' }}>✕ - Close Game</span>
+          </div>
+
+          {/* Mobile-specific hint */}
+          {/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent) && (
+            <div style={{
+              marginTop: '20px',
+              padding: '12px',
+              background: 'rgba(34, 211, 238, 0.1)',
+              border: '1px solid rgba(34, 211, 238, 0.3)',
+              borderRadius: '6px',
+              fontSize: '13px',
+              color: '#AAB4C8'
+            }}>
+              💡 <strong>Mobile Tip:</strong> Most games respond to touch and taps. Try tapping on the game screen to interact. Use fullscreen mode (⛶) for better gameplay!
+            </div>
+          )}
+        </div>
+      )}
+
+      {gameUrl && SHOW_THIRD_PARTY_ADS && <AdGameBanner />}
+    </div>
+  );
+}
+
+function ToastStack({ toasts }: any) {
+  return (
+    <div className="toast-stack">
+      {toasts.map((t: any) => (
+        <div key={t.id} className={`toast ${t.type}`}>
+          <span>{t.type === 'error' ? '⚠' : '✓'}</span>{t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default App;

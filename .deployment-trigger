@@ -1,0 +1,4 @@
+# Render Deployment Trigger
+# Forces Render to redeploy with new Python configuration
+# Date: 2026-09-04
+# Changes: Consolidated to Python-only backend (removed Node.js)
