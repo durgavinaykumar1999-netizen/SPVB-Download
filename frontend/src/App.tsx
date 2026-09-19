@@ -1,3 +1,4 @@
+// VERCEL BUILD REFRESH - Force production cache clear
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './App.css';
 import ScrollingNotice from './ScrollingNotice';
