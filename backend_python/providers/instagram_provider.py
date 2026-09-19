@@ -96,6 +96,13 @@ class InstagramProvider:
     async def download(self, url: str, quality: str, save_path: str, user_cookies: str = None):
         try:
             ydl_opts = build_download_opts(save_path, quality)
+
+            # For Instagram, always ensure audio is merged with video
+            # Instagram separates video and audio, so we need bestvideo+bestaudio
+            if 'format' in ydl_opts:
+                # Force video+audio merge for Instagram
+                ydl_opts['format'] = 'bestvideo+bestaudio/best[acodec!=none]/best'
+
             info, filename = download_with_audio(ydl_opts, url)
 
             return {
