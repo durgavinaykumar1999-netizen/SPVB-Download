@@ -115,7 +115,6 @@ function App() {
   const [phase, setPhase] = useState<'idle' | 'loading' | 'result' | 'error'>('idle');
   const [downloadState, setDownloadState] = useState<string | null>(null);
   const [completedDownload, setCompletedDownload] = useState<Download | null>(null);
-  const [showLiveTV, setShowLiveTV] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const metadataCacheRef = useRef<{ [key: string]: Metadata }>({});
@@ -554,11 +553,6 @@ const manualDownload = useCallback(async () => {
     return <LiveTV onClose={() => window.location.href = '/livetv'} directChannel={decodeURIComponent(channelName)} />;
   }
 
-  // Live TV button click
-  if (showLiveTV) {
-    return <LiveTV onClose={() => setShowLiveTV(false)} />;
-  }
-
   // Movies list route
   if (isMoviesListRoute) {
     return <MoviesList onSelectMovie={(movie) => {
@@ -595,13 +589,9 @@ const manualDownload = useCallback(async () => {
             <a href="/watch" className="nav-btn movies-btn" style={{ textDecoration: 'none' }}>
               <span>🎬</span> Movies
             </a>
-            <button
-              className="nav-btn"
-              onClick={() => setShowLiveTV(true)}
-              style={{ cursor: 'pointer' }}
-            >
+            <a href="/livetv" className="nav-btn" style={{ textDecoration: 'none' }}>
               <span>📺</span> Live TV
-            </button>
+            </a>
             <button className="nav-btn">
               <span>?</span> How it works
             </button>
