@@ -36,7 +36,12 @@ const PORT = process.env.PORT || 1406;
 
 // Middleware
 app.set('trust proxy', true);
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -48,8 +53,6 @@ let db;
 let gamesCollection;
 let moviesCollection;
 let sessionsCollection;
-let visitsCollection;
-let visitCountersCollection;
 let downloadsCollection;
 const DOWNLOADS_COLLECTION_NAME = 'downloads';
 
@@ -62,8 +65,6 @@ const connectMongoDB = async () => {
     gamesCollection = db.collection('games');
     moviesCollection = db.collection('movies');
     sessionsCollection = db.collection('sessions');
-    visitsCollection = db.collection('visits');
-    visitCountersCollection = db.collection('visitCounters');
     downloadsCollection = db.collection(DOWNLOADS_COLLECTION_NAME);
 
     // Create indexes
@@ -72,9 +73,6 @@ const connectMongoDB = async () => {
     await sessionsCollection.createIndex({ session_id: 1 }, { unique: true }).catch(() => {});
     await sessionsCollection.createIndex({ last_activity: 1 }).catch(() => {});
     await sessionsCollection.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
-    await visitsCollection.createIndex({ session_id: 1 }).catch(() => {});
-    await visitsCollection.createIndex({ last_seen: -1 }).catch(() => {});
-    await visitsCollection.createIndex({ created_at: 1 }).catch(() => {});
     await downloadsCollection.createIndex({ session_id: 1 }).catch(() => {});
 
     console.log('[DB] ✅ MongoDB connected for games, movies, and sessions');
@@ -274,23 +272,7 @@ const cleanupExpiredSessions = async () => {
   return removed;
 };
 
-// Record a visit + increment visit counters (total + today)
-const recordVisit = async (visitDoc) => {
-  try {
-    if (!visitsCollection) return;
-    await visitsCollection.insertOne(visitDoc);
-    const today = toDateKey(new Date());
-    const bump = async (id) => {
-      try {
-        await visitCountersCollection.updateOne({ _id: id }, { $inc: { count: 1 } }, { upsert: true });
-      } catch (e) { console.warn('[VISIT] counter error', e.message); }
-    };
-    await bump('total');
-    await bump(today);
-  } catch (e) {
-    console.error('[VISIT] record error:', e.message);
-  }
-};
+// Visitor recording moved to Python backend only
 
 // Stats cache (refreshed on demand, capped so live polling doesn't hammer MongoDB)
 let statsCache = { ts: 0, data: null };
@@ -324,14 +306,6 @@ const computeStats = async () => {
   try { totalGames = await gamesCollection.countDocuments({}); } catch (e) {}
   try { totalMovies = await moviesCollection.countDocuments({}); } catch (e) {}
 
-  try {
-    if (visitCountersCollection) {
-      const totalDoc = await visitCountersCollection.findOne({ _id: 'total' });
-      totalVisits = totalDoc ? (totalDoc.count || 0) : 0;
-      const todayDoc = await visitCountersCollection.findOne({ _id: toDateKey(new Date()) });
-      todayVisits = todayDoc ? (todayDoc.count || 0) : 0;
-    }
-  } catch (e) {}
 
   return {
     totalGames,
@@ -539,47 +513,7 @@ const isActiveSession = async (sessionId) => {
 
 // Reuse an existing still-active session for the same fingerprint instead of
 // creating a new one (browser refresh must NOT count as a new visitor).
-const findReusableSession = async (fingerprint) => {
-  if (!fingerprint || !visitsCollection || !sessionsCollection) return null;
-  const cutoff = new Date(Date.now() - SESSION_TIMEOUT_MS);
-  try {
-    const recent = await visitsCollection
-      .find({ fingerprint, last_seen: { $gt: cutoff } })
-      .sort({ last_seen: -1 })
-      .limit(5)
-      .toArray();
-    for (const v of recent) {
-      if (!v.session_id) continue;
-      const active = await isActiveSession(v.session_id);
-      if (active) return active;
-    }
-  } catch (e) {
-    console.error('[SESS] fingerprint lookup error:', e.message);
-  }
-  return null;
-};
-
-// Reuse the most recent still-active session from the same IP as a fallback.
-// Crawlers/bots typically send a brand-new fingerprint on every request, so
-// fingerprint matching alone cannot stop them from spawning unlimited sessions
-// from one IP. This bounds each public IP to a single live session.
-const findReusableSessionByIp = async (ip) => {
-  if (!ip || !visitsCollection || !sessionsCollection) return null;
-  const cutoff = new Date(Date.now() - SESSION_TIMEOUT_MS);
-  try {
-    const recent = await visitsCollection
-      .find({ ip, last_seen: { $gt: cutoff } })
-      .sort({ last_seen: -1 })
-      .limit(5)
-      .toArray();
-    for (const v of recent) {
-      if (!v.session_id) continue;
-      const active = await isActiveSession(v.session_id);
-      if (active) return active;
-    }
-  } catch (e) {}
-  return null;
-};
+// Session reuse now handled by Python backend
 
 // Push an activity + expiry refresh to in-memory session, MongoDB session and its visit record
 const refreshSession = async (sessionId, now, expiresAt) => {
@@ -594,11 +528,6 @@ const refreshSession = async (sessionId, now, expiresAt) => {
         { session_id: sessionId },
         { $set: { last_activity: now, expires_at: expiresAt } }
       );
-    } catch (e) {}
-  }
-  if (visitsCollection) {
-    try {
-      await visitsCollection.updateOne({ session_id: sessionId }, { $set: { last_seen: now } });
     } catch (e) {}
   }
 };
@@ -622,24 +551,6 @@ const createSessionHandler = async (req, res) => {
       }
     }
 
-    // Otherwise, reuse any still-active session with the same fingerprint
-    const reusable = await findReusableSession(info.fingerprint);
-    if (reusable) {
-      await refreshSession(reusable.session_id, now, expiresAt);
-      return res.json({ success: true, session_id: reusable.session_id, expires_at: expiresAt.toISOString(), reused: true });
-    }
-
-    // Fall back to the most recent active session from the same public IP.
-    // Skips private/local IPs so local testing still distinguishes browsers,
-    // and skips real fingerprint traffic on private hosts.
-    const ip = getClientIp(req);
-    if (!isPrivateIp(ip) || !info.fingerprint) {
-      const reusableByIp = await findReusableSessionByIp(ip);
-      if (reusableByIp) {
-        await refreshSession(reusableByIp.session_id, now, expiresAt);
-        return res.json({ success: true, session_id: reusableByIp.session_id, expires_at: expiresAt.toISOString(), reused: true });
-      }
-    }
 
     const sessionId = 'session-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
@@ -689,7 +600,7 @@ const createSessionHandler = async (req, res) => {
       last_seen: now,
       created_at: now
     };
-    await recordVisit(visitDoc);
+    // Visitor recording moved to Python backend
     invalidateStats();
 
     res.json({ success: true, session_id: sessionId, expires_at: expiresAt.toISOString() });
@@ -732,15 +643,6 @@ app.post('/api/session/heartbeat', async (req, res) => {
     }
   }
 
-  try {
-    if (visitsCollection) {
-      await visitsCollection.updateOne(
-        { session_id },
-        { $set: { last_seen: now } }
-      );
-    }
-  } catch (e) {}
-
   res.json({ success: found, session_id, expires_at: expiresAt.toISOString() });
 });
 
@@ -764,64 +666,7 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
-// Admin - Visitor details (fingerprint, device, browser, location, etc.)
-app.get('/api/admin/visits', verifyAdminToken, async (req, res) => {
-  try {
-    if (!visitsCollection) {
-      return res.json({ success: false, message: 'Visits collection not available' });
-    }
-    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
-    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
-
-    const visits = await visitsCollection
-      .find({})
-      .sort({ last_seen: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .toArray();
-
-    const cleanVisits = visits.map(v => {
-      const { _id, ...rest } = v;
-      return { id: String(_id), ...rest };
-    });
-
-    const deviceBreakdown = (await visitsCollection.aggregate([
-      { $group: { _id: '$device_type', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).toArray()).map(d => ({ device: d._id || 'Unknown', count: d.count }));
-
-    const browserBreakdown = (await visitsCollection.aggregate([
-      { $group: { _id: '$browser', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]).toArray()).map(b => ({ browser: b._id || 'Unknown', count: b.count }));
-
-    let totalVisits = 0;
-    let todayVisits = 0;
-    let activeUsers = 0;
-    try {
-      const totalDoc = await visitCountersCollection.findOne({ _id: 'total' });
-      totalVisits = totalDoc ? (totalDoc.count || 0) : 0;
-      const todayDoc = await visitCountersCollection.findOne({ _id: toDateKey(new Date()) });
-      todayVisits = todayDoc ? (todayDoc.count || 0) : 0;
-      const cutoff = new Date(Date.now() - SESSION_TIMEOUT_MS);
-      activeUsers = await sessionsCollection.countDocuments({ last_activity: { $gt: cutoff } });
-    } catch (e) {}
-
-    res.json({
-      success: true,
-      visits: cleanVisits,
-      totalVisits,
-      todayVisits,
-      activeUsers,
-      deviceBreakdown,
-      browserBreakdown,
-      page,
-      limit
-    });
-  } catch (err) {
-    res.json({ success: false, message: 'Failed to fetch visits: ' + err.message });
-  }
-});
+// Visitor endpoints moved to Python backend (/api/admin/visits)
 
 // Logout / Kill Session - also cleans up all related data
 app.post('/api/logout', async (req, res) => {
