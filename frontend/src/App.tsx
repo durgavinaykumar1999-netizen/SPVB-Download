@@ -774,7 +774,6 @@ const manualDownload = useCallback(async () => {
 
 
 function LivePlayers() {
-  const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:1406';
   const [count, setCount] = useState(5000);
 
   useEffect(() => {
