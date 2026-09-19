@@ -21,7 +21,9 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
+  const [showChannelList, setShowChannelList] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const isMobile = () => /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
 
   // Load IPTV channels
   useEffect(() => {
@@ -42,11 +44,9 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
             const nextLine = (lines[i + 1] || '').trim();
 
             if (nextLine.startsWith('http')) {
-              // Extract channel name
               const nameMatch = line.match(/,(.+?)$/);
               const name = nameMatch ? nameMatch[1].trim() : 'Unknown';
 
-              // Extract language from line attributes
               const langMatch = line.match(/tvg-language="([^"]+)"/);
               const language = langMatch ? langMatch[1].trim() : 'Unknown';
 
@@ -88,12 +88,10 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
   useEffect(() => {
     let filtered = channels;
 
-    // Filter by language
     if (selectedLanguage !== 'all') {
       filtered = filtered.filter(ch => ch.language === selectedLanguage);
     }
 
-    // Filter by search query
     if (searchQuery) {
       filtered = filtered.filter(ch =>
         ch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -104,14 +102,24 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
     setFilteredChannels(filtered);
   }, [searchQuery, selectedLanguage, channels]);
 
-  // Play channel
+  // Play channel and update URL
   const playChannel = (channel: Channel) => {
     setSelectedChannel(channel);
+
+    // Update URL for direct access
+    const channelPath = channel.name.toLowerCase().replace(/\s+/g, '-');
+    window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
+
     if (videoRef.current) {
       videoRef.current.src = channel.url;
       videoRef.current.play().catch(() => {
-        console.log('Playback failed - trying alternative method');
+        console.log('Playback failed');
       });
+    }
+
+    // On mobile, hide channel list to focus on video
+    if (isMobile()) {
+      setShowChannelList(false);
     }
   };
 
@@ -135,16 +143,254 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
         alignItems: 'center',
         justifyContent: 'center',
         background: '#0B1220',
-        color: '#F8FAFC'
+        color: '#F8FAFC',
+        fontSize: '16px'
       }}>
         <div style={{ textAlign: 'center' }}>
-          <div className="spinner" style={{ marginBottom: '20px' }}></div>
+          <div style={{
+            fontSize: '48px',
+            marginBottom: '20px',
+            animation: 'spin 2s linear infinite'
+          }}>📺</div>
           <p>Loading Live TV Channels...</p>
         </div>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
 
+  const mobile = isMobile();
+
+  if (mobile) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#0B1220',
+        color: '#F8FAFC',
+        display: 'flex',
+        flexDirection: 'column',
+        paddingTop: '10px'
+      }}>
+        {/* Mobile Header */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: '12px 16px',
+          background: 'linear-gradient(135deg, #111A2E 0%, #1a3a5f 100%)',
+          borderBottom: '2px solid #2563EB',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100
+        }}>
+          <h1 style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>📺 Live TV</h1>
+          {!showChannelList && (
+            <button
+              onClick={() => setShowChannelList(true)}
+              style={{
+                padding: '6px 12px',
+                background: '#2563EB',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: 'bold'
+              }}
+            >
+              📋 Channels
+            </button>
+          )}
+          {onClose && (
+            <button
+              onClick={onClose}
+              style={{
+                padding: '6px 12px',
+                background: '#EF4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px'
+              }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {/* Video Player - Always visible */}
+        {selectedChannel ? (
+          <div style={{
+            width: '100%',
+            aspectRatio: '16/9',
+            background: '#000',
+            overflow: 'hidden',
+            borderBottom: '2px solid #2563EB'
+          }}>
+            <video
+              ref={videoRef}
+              controls
+              autoPlay
+              playsInline
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'block',
+                background: '#000'
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{
+            width: '100%',
+            aspectRatio: '16/9',
+            background: '#000',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderBottom: '2px solid #2563EB'
+          }}>
+            <div style={{ textAlign: 'center', color: '#AAB4C8', fontSize: '14px' }}>
+              <div style={{ fontSize: '32px', marginBottom: '10px' }}>📺</div>
+              <div>Select a channel to play</div>
+            </div>
+          </div>
+        )}
+
+        {/* Channel Info - Below video when playing */}
+        {selectedChannel && (
+          <div style={{
+            padding: '12px 16px',
+            background: '#111A2E',
+            borderBottom: '1px solid #1e3a5f'
+          }}>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', marginBottom: '6px' }}>
+              ▶ {selectedChannel.name}
+            </div>
+            <div style={{ fontSize: '11px', color: '#AAB4C8', lineHeight: '1.4' }}>
+              {selectedChannel.language && <div>🗣️ {selectedChannel.language}</div>}
+              {selectedChannel.country && <div>🌍 {selectedChannel.country}</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Channels List - Toggleable on mobile */}
+        {showChannelList && (
+          <div style={{
+            flex: 1,
+            overflow: 'auto',
+            padding: '12px 16px',
+            paddingBottom: '80px'
+          }}>
+            {/* Filters */}
+            <input
+              type="text"
+              placeholder="🔍 Search channels..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                marginBottom: '10px',
+                background: '#0B1220',
+                border: '1px solid #2563EB',
+                borderRadius: '6px',
+                color: '#F8FAFC',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+
+            <select
+              value={selectedLanguage}
+              onChange={(e) => setSelectedLanguage(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                marginBottom: '12px',
+                background: '#0B1220',
+                border: '1px solid #2563EB',
+                borderRadius: '6px',
+                color: '#F8FAFC',
+                fontSize: '14px',
+                cursor: 'pointer',
+                boxSizing: 'border-box'
+              }}
+            >
+              {languages.map(lang => (
+                <option key={lang} value={lang}>
+                  {lang === 'all' ? '🌍 All Languages' : `🗣️ ${lang}`}
+                </option>
+              ))}
+            </select>
+
+            <div style={{
+              fontSize: '12px',
+              color: '#AAB4C8',
+              marginBottom: '12px',
+              paddingBottom: '12px',
+              borderBottom: '1px solid #1e3a5f'
+            }}>
+              Found: <strong>{filteredChannels.length}</strong> channels
+            </div>
+
+            {/* Channel Buttons */}
+            {filteredChannels.length === 0 ? (
+              <div style={{ textAlign: 'center', color: '#AAB4C8', padding: '20px' }}>
+                No channels found
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '8px' }}>
+                {filteredChannels.map((channel, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => playChannel(channel)}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: selectedChannel?.url === channel.url ? '#2563EB' : '#0B1220',
+                      border: selectedChannel?.url === channel.url ? '2px solid #2563EB' : '1px solid #1e3a5f',
+                      borderRadius: '6px',
+                      color: '#F8FAFC',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: '13px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (selectedChannel?.url !== channel.url) {
+                        e.currentTarget.style.background = '#1a3a5f';
+                        e.currentTarget.style.borderColor = '#2563EB';
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (selectedChannel?.url !== channel.url) {
+                        e.currentTarget.style.background = '#0B1220';
+                        e.currentTarget.style.borderColor = '#1e3a5f';
+                      }
+                    }}
+                  >
+                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>▶ {channel.name}</div>
+                    <div style={{ fontSize: '11px', color: '#AAB4C8' }}>
+                      {channel.language} {channel.country && `• ${channel.country}`}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop Layout
   return (
     <div style={{
       minHeight: '100vh',
@@ -183,7 +429,14 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '20px', maxWidth: '1400px', margin: '0 auto' }}>
+      {/* Desktop Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '350px 1fr',
+        gap: '20px',
+        maxWidth: '1400px',
+        margin: '0 auto'
+      }}>
         {/* LEFT: Channel List */}
         <div style={{
           background: '#111A2E',
@@ -196,49 +449,45 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
           overflow: 'hidden'
         }}>
           {/* Filters */}
-          <div style={{ marginBottom: '15px' }}>
-            {/* Search */}
-            <input
-              type="text"
-              placeholder="🔍 Search channels..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                marginBottom: '10px',
-                background: '#0B1220',
-                border: '1px solid #2563EB',
-                borderRadius: '6px',
-                color: '#F8FAFC',
-                fontSize: '14px'
-              }}
-            />
+          <input
+            type="text"
+            placeholder="🔍 Search channels..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px',
+              marginBottom: '10px',
+              background: '#0B1220',
+              border: '1px solid #2563EB',
+              borderRadius: '6px',
+              color: '#F8FAFC',
+              fontSize: '14px'
+            }}
+          />
 
-            {/* Language Filter */}
-            <select
-              value={selectedLanguage}
-              onChange={(e) => setSelectedLanguage(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px',
-                background: '#0B1220',
-                border: '1px solid #2563EB',
-                borderRadius: '6px',
-                color: '#F8FAFC',
-                fontSize: '14px',
-                cursor: 'pointer'
-              }}
-            >
-              {languages.map(lang => (
-                <option key={lang} value={lang}>
-                  {lang === 'all' ? '🌍 All Languages' : `🗣️ ${lang}`}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={selectedLanguage}
+            onChange={(e) => setSelectedLanguage(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px',
+              marginBottom: '15px',
+              background: '#0B1220',
+              border: '1px solid #2563EB',
+              borderRadius: '6px',
+              color: '#F8FAFC',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            {languages.map(lang => (
+              <option key={lang} value={lang}>
+                {lang === 'all' ? '🌍 All Languages' : `🗣️ ${lang}`}
+              </option>
+            ))}
+          </select>
 
-          {/* Channel Count */}
           <div style={{
             fontSize: '12px',
             color: '#AAB4C8',
@@ -247,7 +496,7 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
             Found: <strong>{filteredChannels.length}</strong> channels
           </div>
 
-          {/* Channels Scroll */}
+          {/* Channel List Scroll */}
           <div style={{
             flex: 1,
             overflowY: 'auto',
@@ -278,14 +527,14 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
                   }}
                   onMouseEnter={(e) => {
                     if (selectedChannel?.url !== channel.url) {
-                      (e.target as HTMLElement).style.background = '#1a3a5f';
-                      (e.target as HTMLElement).style.borderColor = '#2563EB';
+                      e.currentTarget.style.background = '#1a3a5f';
+                      e.currentTarget.style.borderColor = '#2563EB';
                     }
                   }}
                   onMouseLeave={(e) => {
                     if (selectedChannel?.url !== channel.url) {
-                      (e.target as HTMLElement).style.background = '#0B1220';
-                      (e.target as HTMLElement).style.borderColor = '#1e3a5f';
+                      e.currentTarget.style.background = '#0B1220';
+                      e.currentTarget.style.borderColor = '#1e3a5f';
                     }
                   }}
                 >
@@ -305,7 +554,7 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
           flexDirection: 'column',
           gap: '15px'
         }}>
-          {/* Video Player */}
+          {/* Video */}
           <div style={{
             background: '#000',
             borderRadius: '8px',
@@ -380,20 +629,11 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
               <li>Filter by language using dropdown</li>
               <li>Click on any channel to play</li>
               <li>Use video controls (Play, Volume, Fullscreen)</li>
+              <li>Direct access: /livetv/channel-name</li>
             </ul>
           </div>
         </div>
       </div>
-
-      {/* Mobile Responsive */}
-      <style>{`
-        @media (max-width: 768px) {
-          div[style*="display: grid"] {
-            display: flex !important;
-            flex-direction: column !important;
-          }
-        }
-      `}</style>
     </div>
   );
 }
