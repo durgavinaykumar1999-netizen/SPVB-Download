@@ -571,9 +571,6 @@ const manualDownload = useCallback(async () => {
       <div className="bg-blob blob1"></div>
       <div className="bg-blob blob2"></div>
 
-      {/* INITIAL MOBILE ADS - ONLY ON PAGE LOAD */}
-      <InitialMobileAds />
-
       <ToastStack toasts={toasts} />
 
       <div style={{ position: 'relative', zIndex: 2, background: 'transparent' }}>
@@ -607,6 +604,9 @@ const manualDownload = useCallback(async () => {
           <PlatformBadges />
           <LivePlayers />
         </section>
+
+        {/* MOBILE ADS - LOAD INITIALLY ON MOBILE */}
+        <InitialMobileAds />
 
         <section className="main-content">
             <div className="content-layout">
