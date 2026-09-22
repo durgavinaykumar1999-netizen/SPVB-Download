@@ -11,7 +11,6 @@ from dotenv import load_dotenv
 from .config.env import config
 from .routes.public_routes import router as public_router
 from .routes.admin_routes import router as admin_router
-from .routes.admin_cleanup import router as cleanup_router
 from .utils.logger import setup_logger
 from .services.cleanup_service import CleanupService
 
@@ -88,7 +87,6 @@ logger.info(f"Frontend path: {FRONTEND_PATH}, exists: {os.path.exists(FRONTEND_P
 # Include routes (must be BEFORE catch-all)
 app.include_router(public_router)
 app.include_router(admin_router)
-app.include_router(cleanup_router)
 
 # Root path
 @app.get("/", name="root")

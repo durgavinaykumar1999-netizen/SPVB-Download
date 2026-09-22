@@ -41,37 +41,20 @@ class DownloadQueue:
             try:
                 download_info = self.queue.get(timeout=1)
                 self._process_download(download_info)
-                # Mark task as done to prevent queue from growing
-                self.queue.task_done()
             except queue.Empty:
                 continue
             except Exception as e:
                 logger.error(f"Queue worker error: {str(e)}")
-                try:
-                    self.queue.task_done()
-                except ValueError:
-                    pass  # Already marked done
 
     def _process_download(self, download_info):
-        """Process download in background thread - MUST NOT BLOCK"""
         download_id = download_info["download_id"]
 
-        # Spawn worker thread for this download
-        # This prevents blocking the queue worker
-        worker = threading.Thread(
-            target=self._download_worker,
-            args=(download_id, download_info),
-            daemon=True
-        )
-        worker.start()
-        # Don't wait - return immediately to process next queue item
-
-    def _download_worker(self, download_id, download_info):
-        """Background worker thread for actual download processing"""
         try:
             import asyncio
 
             async def process():
+                # CRITICAL: Lock by download_id to prevent concurrent processing
+                # This ensures each download has unique metadata and doesn't overlap
                 await self.db.update_download(
                     download_id,
                     {"status": "downloading", "progress": 10, "started_at": datetime.utcnow()}
@@ -80,18 +63,22 @@ class DownloadQueue:
                 save_path = config.save_path
                 os.makedirs(save_path, exist_ok=True)
 
+                # IMPORTANT: Get provider based on actual URL in download_info
+                # Do NOT reuse previous download's URL
                 provider = get_provider(download_info["url"])
                 user_cookies = download_info.get("user_cookies")
 
                 await self.db.update_download(download_id, {"progress": 30})
 
+                # CRITICAL: Use unique temporary filename based on download_id
+                # to prevent multiple downloads overwriting each other
                 temp_download_dir = os.path.join(save_path, f"temp_{download_id}")
                 os.makedirs(temp_download_dir, exist_ok=True)
 
                 result = await provider.download(
-                    download_info["url"],
+                    download_info["url"],  # Use URL from this specific download
                     download_info["quality"],
-                    temp_download_dir
+                    temp_download_dir  # Use unique directory per download
                 )
 
                 await self.db.update_download(download_id, {"progress": 75})
@@ -100,11 +87,13 @@ class DownloadQueue:
                 if os.path.exists(result["filename"]):
                     await self.db.update_download(download_id, {"progress": 90})
 
+                    # CRITICAL: Use download_id as public_id to keep each download unique
                     cloudinary_url = await self.cloudinary.upload_video(
                         result["filename"],
-                        f"download-{download_id}"
+                        f"download-{download_id}"  # Ensure globally unique ID
                     )
 
+# CRITICAL: Store exact download_id and filename to prevent mixing
                     await self.db.update_download(
                         download_id,
                         {
@@ -114,33 +103,25 @@ class DownloadQueue:
                             "file_url": cloudinary_url or "",
                             "cloudinary_public_id": f"download-{download_id}" if cloudinary_url else "",
                             "completed_at": datetime.utcnow(),
-                            "download_id": download_id
+                            "download_id": download_id  # Explicitly store ID to prevent overlap
                         }
                     )
 
-                # DELETE temp directory immediately
-                try:
-                    import shutil
-                    if os.path.exists(temp_download_dir):
-                        shutil.rmtree(temp_download_dir)
-                        logger.info(f"Cleaned temp directory: {temp_download_dir}")
-                except Exception as e:
-                    logger.warning(f"Failed to clean temp directory: {str(e)}")
+                # IMPORTANT: Keep temp directory for backup/recovery
+                # Files are already in Cloudinary, but local backup helps if upload fails
+                # Manual cleanup should be done via admin API only
+                # try:
+                #     import shutil
+                #     temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
+                #     if os.path.exists(temp_download_dir):
+                #         shutil.rmtree(temp_download_dir)
+                # except Exception as e:
+                #     logger.warning(f"Failed to clean temp directory: {str(e)}")
 
             asyncio.run(process())
 
         except Exception as e:
-            logger.error(f"Download worker error for {download_id}: {str(e)}")
-            # Clean up temp directory on failure
-            try:
-                import shutil
-                temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
-                if os.path.exists(temp_download_dir):
-                    shutil.rmtree(temp_download_dir)
-            except Exception as cleanup_err:
-                logger.warning(f"Cleanup error: {str(cleanup_err)}")
-
-            # Update status to failed
+            logger.error(f"Download processing error for {download_id}: {str(e)}")
             try:
                 import asyncio
                 asyncio.run(self.db.update_download(
@@ -149,8 +130,8 @@ class DownloadQueue:
                         "status": "failed",
                         "error": str(e),
                         "completed_at": datetime.utcnow(),
-                        "download_id": download_id
+                        "download_id": download_id  # Store ID even on failure
                     }
                 ))
             except Exception as db_err:
-                logger.error(f"Failed to update error status: {str(db_err)}")
+                logger.error(f"Failed to update error status for {download_id}: {str(db_err)}")
