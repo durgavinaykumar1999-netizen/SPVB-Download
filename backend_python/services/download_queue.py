@@ -107,33 +107,21 @@ class DownloadQueue:
                         }
                     )
 
-                # CRITICAL: Clean up temporary directory after upload
-                # Files have been uploaded to Cloudinary, local temp files not needed
-                # This prevents storage overflow on Render (free tier has limited disk)
-                try:
-                    import shutil
-                    temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
-                    if os.path.exists(temp_download_dir):
-                        shutil.rmtree(temp_download_dir)
-                        logger.info(f"Cleaned temp directory for download {download_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to clean temp directory for {download_id}: {str(e)}")
+                # IMPORTANT: Keep temp directory for backup/recovery
+                # Files are already in Cloudinary, but local backup helps if upload fails
+                # Manual cleanup should be done via admin API only
+                # try:
+                #     import shutil
+                #     temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
+                #     if os.path.exists(temp_download_dir):
+                #         shutil.rmtree(temp_download_dir)
+                # except Exception as e:
+                #     logger.warning(f"Failed to clean temp directory: {str(e)}")
 
             asyncio.run(process())
 
         except Exception as e:
             logger.error(f"Download processing error for {download_id}: {str(e)}")
-            # Clean up temp directory even on failure to avoid storage buildup
-            try:
-                import shutil
-                temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
-                if os.path.exists(temp_download_dir):
-                    shutil.rmtree(temp_download_dir)
-                    logger.info(f"Cleaned temp directory after failed download {download_id}")
-            except Exception as cleanup_err:
-                logger.warning(f"Failed to clean temp directory after error: {str(cleanup_err)}")
-
-            # Update DB with failure status
             try:
                 import asyncio
                 asyncio.run(self.db.update_download(
