@@ -15,31 +15,22 @@ _HAS_FFPROBE = bool(shutil.which('ffprobe'))
 def build_download_opts(save_path: str, quality: str):
     """Build yt-dlp options that guarantee H.264 video + AAC audio in MP4.
 
-    When ffmpeg is available the preferred chain merges best video + best
-    audio into an MP4 with H.264 (VP9 not supported in MP4).
-    Without ffmpeg, pick the best single format that already contains audio.
+    IMPORTANT: We ALWAYS prefer H.264 over VP9 (VP9 not compatible with MP4 container).
+    This is non-negotiable for WhatsApp, Instagram, Facebook compatibility.
     """
     if quality == 'best':
-        if _HAS_FFMPEG:
-            # Prefer H.264/AVC video (VP9 not compatible with MP4 container)
-            # bestvideo[vcodec^=avc1] = best video with H.264 codec
-            quality_value = 'bestvideo[vcodec^=avc1]+bestaudio[acodec=aac]/best[acodec!=none]/best'
-        else:
-            quality_value = 'best[acodec!=none]/best'
+        # PRIORITY 1: H.264 + AAC (best compatibility)
+        # PRIORITY 2: Any video + AAC (will convert VP9→H.264 post-download)
+        # PRIORITY 3: Best single file with audio
+        quality_value = 'bestvideo[vcodec^=avc1]+bestaudio[acodec=aac]/bestvideo+bestaudio[acodec=aac]/best[acodec!=none]/best'
     else:
-        if _HAS_FFMPEG:
-            # Force H.264 video with AAC audio for MP4 compatibility
-            quality_value = (
-                f'bestvideo[height<={quality}][vcodec^=avc1]+bestaudio[acodec=aac]/'
-                f'bestvideo[height<={quality}]+bestaudio/'
-                f'best[height<={quality}][acodec!=none]/'
-                f'best[height<={quality}]/best'
-            )
-        else:
-            quality_value = (
-                f'best[height<={quality}][acodec!=none]/'
-                f'best[height<={quality}]/best'
-            )
+        # Same priority for height-limited downloads
+        quality_value = (
+            f'bestvideo[height<={quality}][vcodec^=avc1]+bestaudio[acodec=aac]/'
+            f'bestvideo[height<={quality}]+bestaudio[acodec=aac]/'
+            f'best[height<={quality}][acodec!=none]/'
+            f'best[height<={quality}]/best'
+        )
 
     opts = {
         'format': quality_value,
@@ -59,7 +50,6 @@ def build_download_opts(save_path: str, quality: str):
                 'preferedformat': 'mp4',
             },
             {
-                # Force H.264 video codec if not already H.264
                 'key': 'FFmpegVideoRemuxer',
                 'preferedformat': 'mp4',
             }
@@ -141,14 +131,24 @@ def _has_h264_video(filepath: str) -> bool:
 
 
 def _convert_to_h264(filepath: str) -> str:
-    """Convert video to H.264 if it's VP9 or other incompatible codec."""
-    if not _HAS_FFMPEG or not filepath or not os.path.exists(filepath):
+    """Convert video to H.264 if it's VP9 or other incompatible codec.
+
+    CRITICAL: This ensures WhatsApp, Instagram, Facebook compatibility.
+    VP9 is NOT supported in MP4 containers - must be H.264.
+    """
+    if not filepath or not os.path.exists(filepath):
+        logger.error(f"File not found for H.264 conversion: {filepath}")
         return filepath
 
     if _has_h264_video(filepath):
+        logger.info(f"Video already H.264: {filepath}")
         return filepath  # Already H.264, no conversion needed
 
-    logger.info(f"Converting {filepath} to H.264 for MP4 compatibility")
+    if not _HAS_FFMPEG:
+        logger.error(f"FFmpeg not available - cannot convert VP9 to H.264. File will remain incompatible: {filepath}")
+        return filepath
+
+    logger.warning(f"Converting {filepath} to H.264 for WhatsApp/Instagram/Facebook compatibility")
 
     import tempfile
     import shutil as sh
@@ -158,31 +158,44 @@ def _convert_to_h264(filepath: str) -> str:
         temp_fd, temp_path = tempfile.mkstemp(suffix='.mp4')
         os.close(temp_fd)
 
-        # Convert to H.264 using FFmpeg
+        # Convert VP9/other codec to H.264 using FFmpeg
+        # Use -y to auto-overwrite temp file
         result = subprocess.run(
             [
-                'ffmpeg', '-i', filepath,
-                '-c:v', 'libx264',  # H.264 video codec
+                'ffmpeg', '-y', '-i', filepath,
+                '-c:v', 'libx264',  # H.264 video encoder
+                '-preset', 'fast',  # Balance speed (ultrafast/fast/medium/slow)
+                '-crf', '23',       # Quality: 0-51 (lower=better, 23=default)
                 '-c:a', 'aac',      # AAC audio codec
-                '-preset', 'fast',  # Speed vs quality tradeoff
-                '-crf', '23',       # Quality (lower = better, 23 is default)
+                '-b:a', '128k',     # Audio bitrate
                 temp_path,
             ],
             capture_output=True,
-            timeout=3600,  # 1 hour timeout for conversion
+            timeout=3600,  # 1 hour max for large videos
         )
 
-        if result.returncode == 0 and os.path.exists(temp_path):
-            # Replace original with converted version
-            sh.move(temp_path, filepath)
-            logger.info(f"Successfully converted to H.264: {filepath}")
-            return filepath
+        if result.returncode == 0 and os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
+            # Verify conversion was successful
+            if _has_h264_video(temp_path):
+                # Replace original with converted version
+                sh.move(temp_path, filepath)
+                logger.info(f"✅ Successfully converted to H.264: {filepath}")
+                return filepath
+            else:
+                logger.error(f"Conversion failed - output is not H.264: {temp_path}")
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                return filepath
         else:
-            logger.error(f"FFmpeg conversion failed: {result.stderr.decode()}")
+            stderr_msg = result.stderr.decode() if result.stderr else "Unknown error"
+            logger.error(f"FFmpeg conversion failed (returncode={result.returncode}): {stderr_msg}")
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
             return filepath  # Return original if conversion fails
 
+    except subprocess.TimeoutExpired:
+        logger.error(f"H.264 conversion timeout (>1 hour): {filepath}")
+        return filepath
     except Exception as e:
         logger.error(f"H.264 conversion error: {str(e)}")
         return filepath
