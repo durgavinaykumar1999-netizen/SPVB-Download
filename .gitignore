@@ -1,16 +1,8 @@
-# Environment Variables
-.env
-.env.local
-.env.*.local
-
-# Cookies (contains auth tokens - NEVER commit)
-backend_python/cookies.txt
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
+# Dependencies
+node_modules/
+frontend/node_modules/
+venv/
+*.egg-info/
 .Python
 build/
 develop-eggs/
@@ -24,18 +16,23 @@ parts/
 sdist/
 var/
 wheels/
-pip-wheel-metadata/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
-venv/
-ENV/
-env/
-venv_new/
 
-# IDE
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Frontend build
+frontend/build/
+frontend/.next/
+frontend/out/
+
+# IDE & Editor
 .vscode/
 .idea/
 *.swp
@@ -43,14 +40,24 @@ venv_new/
 *~
 .DS_Store
 
-# Node
-node_modules/
-npm-debug.log
-yarn-error.log
+# Environment variables
+.env.local
+.env.production.local
+.env.development.local
+.env.test.local
 
 # Logs
-*.log
 logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.pytest_cache/
+.eslintcache
+iptv_cache/
 
 # Temporary files
 *.tmp
@@ -58,35 +65,25 @@ logs/
 temp/
 tmp/
 
-# Storage
-storage/downloads/
-SPVB-Downloads/
-
 # OS
-.DS_Store
 Thumbs.db
+.DS_Store
 
 # Testing
-.pytest_cache/
 .coverage
 htmlcov/
 
-# Build directories
-build/
-frontend/build/
-dist/
+# Local deployment files
+.deployment-trigger
+.render-redeploy-trigger
 
-# Development
-.claude/
-.env.development
-.env.staging
-.env.production
+# Test/development only
+test.py
+test1.py
+WhatsApp*.jpeg
+*.jpeg
+*.jpg
+*.png
 
-# System files
-package-lock.json
-yarn.lock
-
-# Certificates (if any)
-*.pem
-*.key
-*.crt
+# Don't ignore
+!.gitkeep
