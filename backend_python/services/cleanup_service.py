@@ -63,22 +63,30 @@ class CleanupService:
             logger.error(f"Error in cleanup_expired_sessions: {str(e)}")
 
     async def _delete_session_data(self, session_id: str):
-        """Delete all data related to a session including Cloudinary files"""
+        """Delete all data related to a session including Cloudinary files and temp directories"""
         try:
             self.db._ensure_connected()
             logger.info(f"Starting cleanup for session: {session_id}")
+            from ..config.env import config
+            import os
+            import shutil
 
             # Get all downloads for this session
             downloads = list(self.db.downloads.find({"session_id": session_id}))
 
-            # Delete Cloudinary files for this session
+            # Delete Cloudinary files and temp directories
             cloudinary_count = 0
+            temp_dir_count = 0
+
             for download in downloads:
+                download_id = download.get("download_id")
+
+                # Delete Cloudinary files for this download
                 try:
                     # Prefer stored public_id, otherwise derive it from download_id
                     public_id = download.get("cloudinary_public_id")
-                    if not public_id and download.get("download_id"):
-                        public_id = f"download-{download.get('download_id')}"
+                    if not public_id and download_id:
+                        public_id = f"download-{download_id}"
                     if public_id:
                         await self.cloudinary.delete_video(public_id)
                         cloudinary_count += 1
@@ -86,9 +94,20 @@ class CleanupService:
                 except Exception as e:
                     logger.error(f"Error deleting Cloudinary file: {str(e)}")
 
+                # Delete temp directory for this download
+                try:
+                    if download_id:
+                        temp_dir = os.path.join(config.save_path, f"temp_{download_id}")
+                        if os.path.exists(temp_dir):
+                            shutil.rmtree(temp_dir)
+                            temp_dir_count += 1
+                            logger.info(f"Deleted temp directory: {temp_dir}")
+                except Exception as e:
+                    logger.warning(f"Error deleting temp directory for {download_id}: {str(e)}")
+
             # Delete all downloads from MongoDB
             self.db.downloads.delete_many({"session_id": session_id})
-            logger.info(f"Deleted {len(downloads)} downloads from MongoDB, {cloudinary_count} from Cloudinary")
+            logger.info(f"Deleted {len(downloads)} downloads from MongoDB, {cloudinary_count} from Cloudinary, {temp_dir_count} temp dirs")
 
             # Delete session from MongoDB
             self.db.sessions.delete_one({"session_id": session_id})
