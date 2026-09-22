@@ -17,4 +17,4 @@ services:
           property: connectionString
     autoDeploy: true
     healthCheckPath: /api/health
-    # Force redeploy - Improved H.264 codec selection (2026-09-22 v2)
+    # Force redeploy - Memory/storage cleanup fix (2026-09-22 v3)
