@@ -41,10 +41,16 @@ class DownloadQueue:
             try:
                 download_info = self.queue.get(timeout=1)
                 self._process_download(download_info)
+                # Mark task as done to prevent queue from growing
+                self.queue.task_done()
             except queue.Empty:
                 continue
             except Exception as e:
                 logger.error(f"Queue worker error: {str(e)}")
+                try:
+                    self.queue.task_done()
+                except ValueError:
+                    pass  # Already marked done
 
     def _process_download(self, download_info):
         download_id = download_info["download_id"]
@@ -107,21 +113,31 @@ class DownloadQueue:
                         }
                     )
 
-                # IMPORTANT: Keep temp directory for backup/recovery
-                # Files are already in Cloudinary, but local backup helps if upload fails
-                # Manual cleanup should be done via admin API only
-                # try:
-                #     import shutil
-                #     temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
-                #     if os.path.exists(temp_download_dir):
-                #         shutil.rmtree(temp_download_dir)
-                # except Exception as e:
-                #     logger.warning(f"Failed to clean temp directory: {str(e)}")
+                # CRITICAL: DELETE temp directory immediately after upload to prevent memory overflow
+                # Render has limited disk space - don't keep temp files
+                try:
+                    import shutil
+                    if os.path.exists(temp_download_dir):
+                        shutil.rmtree(temp_download_dir)
+                        logger.info(f"Cleaned temp directory: {temp_download_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean temp directory {temp_download_dir}: {str(e)}")
 
             asyncio.run(process())
 
         except Exception as e:
             logger.error(f"Download processing error for {download_id}: {str(e)}")
+            # Clean up temp directory on failure too
+            try:
+                import shutil
+                temp_download_dir = os.path.join(config.save_path, f"temp_{download_id}")
+                if os.path.exists(temp_download_dir):
+                    shutil.rmtree(temp_download_dir)
+                    logger.info(f"Cleaned failed download temp dir: {temp_download_dir}")
+            except Exception as cleanup_err:
+                logger.warning(f"Failed to cleanup temp dir on error: {str(cleanup_err)}")
+
+            # Update status to failed
             try:
                 import asyncio
                 asyncio.run(self.db.update_download(
