@@ -49,8 +49,9 @@ frontend/out/
 .env.test.local
 config/.env
 frontend/.env
-frontend/.env.production
 backend_python/.env
+# frontend/.env.production is intentionally committed - it only holds the
+# public API URL and is required for production builds (REACT_APP_API_URL).
 
 # Logs
 logs/

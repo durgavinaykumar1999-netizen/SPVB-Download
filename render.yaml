@@ -11,6 +11,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: REACT_APP_API_URL
+        value: https://spvb-download-backend.onrender.com
       - key: MONGODB_URI
         fromDatabase:
           name: spvb-downloader
