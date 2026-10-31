@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Hls from 'hls.js';
 
 interface Channel {
   name: string;
@@ -22,7 +23,9 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
   const [languages, setLanguages] = useState<string[]>([]);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [showChannelList, setShowChannelList] = useState(true);
+  const [playbackError, setPlaybackError] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const isMobile = () => /iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent);
 
   // Load IPTV channels
@@ -122,18 +125,82 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
     const channelPath = normalizeChannelName(channel.name);
     window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
 
-    if (videoRef.current) {
-      videoRef.current.src = channel.url;
-      videoRef.current.play().catch(() => {
-        console.log('Playback failed');
-      });
-    }
-
     // On mobile, hide channel list to focus on video
     if (isMobile()) {
       setShowChannelList(false);
     }
   };
+
+  // Load the selected stream. HLS (.m3u8) needs hls.js on Chrome/Firefox/Edge,
+  // because those browsers cannot play HLS with a native <video> element.
+  useEffect(() => {
+    if (!selectedChannel || !videoRef.current) return;
+
+    const video = videoRef.current;
+    const url = selectedChannel.url;
+
+    setPlaybackError('');
+
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+
+    if (window.location.protocol === 'https:' && url.startsWith('http://')) {
+      setPlaybackError('This channel uses an insecure HTTP stream, which browsers block on HTTPS. Please pick another channel.');
+      return;
+    }
+
+    const isHls = /\.m3u8(\?|$)/i.test(url) || /\/(hls|live)\//i.test(url);
+
+    if (isHls) {
+      if (Hls.isSupported()) {
+        const hls = new Hls({ debug: false, enableWorker: true });
+        hlsRef.current = hls;
+        hls.loadSource(url);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(() => {});
+        });
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (!data.fatal) return;
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              setPlaybackError('Network error loading this channel (it may be offline, blocked by CORS, or geo-restricted). Please pick another channel.');
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              setPlaybackError('This channel uses a video format/codec your browser cannot decode (e.g. HEVC/H.265). Please pick another channel.');
+              break;
+            default:
+              setPlaybackError('Unable to play this channel. Please pick another channel.');
+          }
+        });
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+        video.play().catch(() => {});
+      } else {
+        setPlaybackError('Your browser does not support HLS playback.');
+      }
+    } else {
+      video.src = url;
+      video.play().catch(() => {});
+    }
+  }, [selectedChannel]);
+
+  // Stop playback and release hls.js resources when leaving Live TV
+  useEffect(() => {
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, []);
 
   // Auto-play direct channel from URL
   useEffect(() => {
@@ -162,14 +229,6 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
       // Update URL
       const channelPath = normalizeChannelName(channel.name);
       window.history.pushState(null, '', `/livetv/${encodeURIComponent(channelPath)}`);
-
-      // Auto-play
-      if (videoRef.current) {
-        videoRef.current.src = channel.url;
-        videoRef.current.play().catch(() => {
-          console.log('Playback failed');
-        });
-      }
 
       if (isMobile()) {
         setShowChannelList(false);
@@ -304,6 +363,18 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
               <div style={{ fontSize: '32px', marginBottom: '10px' }}>📺</div>
               <div>Select a channel to play</div>
             </div>
+          </div>
+        )}
+
+        {playbackError && (
+          <div style={{
+            padding: '10px 16px',
+            background: '#7f1d1d',
+            color: '#fecaca',
+            fontSize: '12px',
+            borderBottom: '1px solid #991b1b'
+          }}>
+            ⚠️ {playbackError}
           </div>
         )}
 
@@ -618,6 +689,16 @@ export default function LiveTV({ onClose, directChannel }: LiveTVProps) {
                     display: 'block'
                   }}
                 />
+                {playbackError && (
+                  <div style={{
+                    padding: '12px 15px',
+                    background: '#7f1d1d',
+                    color: '#fecaca',
+                    fontSize: '13px'
+                  }}>
+                    ⚠️ {playbackError}
+                  </div>
+                )}
                 {/* Channel Info */}
                 <div style={{
                   padding: '15px',
