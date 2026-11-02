@@ -1209,7 +1209,6 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   }, []);
 
   useEffect(() => {
-    setIsolated(typeof window.crossOriginIsolated === 'boolean' ? window.crossOriginIsolated : false);
     if (/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent)) {
       setControlsOpen(true);
     }
@@ -1238,6 +1237,32 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const isFivePlay = isFivePlayUrl(gameUrl);
+  const browserLabel = (navigator.userAgent.match(/Chrome\/[\d.]+/) || ['Unknown browser'])[0];
+
+  // If the browser cached an old copy of this page without the COOP/COEP
+  // headers (or an extension stripped them), do one cache-busted reload before
+  // showing the warning. The sessionStorage flag prevents a reload loop.
+  useEffect(() => {
+    if (!isFivePlay) return;
+    const isIsolated = window.crossOriginIsolated === true;
+    setIsolated(isIsolated);
+    if (isIsolated) {
+      sessionStorage.removeItem('gta-iso-retry');
+      return;
+    }
+    if (sessionStorage.getItem('gta-iso-retry') === '1') return;
+    sessionStorage.setItem('gta-iso-retry', '1');
+    const retryUrl = new URL(window.location.href);
+    retryUrl.searchParams.set('iso', 'retry');
+    window.location.replace(retryUrl.toString());
+  }, [isFivePlay]);
+
+  const retryIsolation = () => {
+    sessionStorage.removeItem('gta-iso-retry');
+    const retryUrl = new URL(window.location.href);
+    retryUrl.searchParams.set('iso', 'retry');
+    window.location.replace(retryUrl.toString());
+  };
 
   return (
     <div className="game-page">
@@ -1249,9 +1274,6 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         </div>
         <div className="game-header-actions">
           <button className="game-btn" onClick={() => setControlsOpen(v => !v)}>ℹ️ Controls</button>
-          {isFivePlay && (
-            <a className="game-btn" href={gameUrl} target="_blank" rel="noopener noreferrer">↗ New Tab</a>
-          )}
           <button className="game-btn green" onClick={toggleFullscreen}>⛶ Fullscreen</button>
           <button className="game-btn red" onClick={closeGame}>✕ Close</button>
         </div>
@@ -1275,17 +1297,23 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
             {isFivePlay && isolated === false && (
               <div className="game-isolation-warning">
                 <div className="coming-soon-icon">⚠️</div>
-                <h2>This game needs cross-origin isolation</h2>
+                <h2>The browser blocked the game from running on this page</h2>
                 <p>
-                  Open this page in desktop Chrome or Edge over HTTPS. If it still does not start,
-                  open the game directly in a new tab.
+                  This page must be cross-origin isolated for the game engine. Try a hard reload
+                  (Ctrl+Shift+R), turn off ad-block/privacy extensions for this site, and use the
+                  latest desktop Chrome or Edge. Do not open this site inside another app's preview.
                 </p>
                 <div className="game-isolation-actions">
-                  <a className="game-btn green" href={gameUrl} target="_blank" rel="noopener noreferrer">
-                    ↗ Open Game
-                  </a>
+                  <button className="game-btn green" onClick={retryIsolation}>🔄 Reload and try again</button>
                   <a className="game-btn" href="/play">← Back to Games</a>
                 </div>
+                <p className="game-isolation-debug">
+                  Diagnostics: secure context {window.isSecureContext ? 'yes' : 'no'} ·
+                  crossOriginIsolated no · {browserLabel}
+                </p>
+                <a className="game-isolation-direct" href={gameUrl} target="_blank" rel="noopener noreferrer">
+                  Still not working? Open the game directly
+                </a>
               </div>
             )}
           </div>

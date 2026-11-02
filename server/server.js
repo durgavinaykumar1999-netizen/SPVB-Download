@@ -845,6 +845,7 @@ app.use((req, res, next) => {
   if (CROSS_ORIGIN_ISOLATED_PATHS.has(cleanPath)) {
     res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
     res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   }
   next();
 });

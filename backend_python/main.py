@@ -78,6 +78,8 @@ async def game_isolation_headers(request, call_next):
     if path in CROSS_ORIGIN_ISOLATED_PATHS:
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
+        # Never let a browser/CDN reuse an HTML copy without these headers.
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response
 
 # Request logging middleware
