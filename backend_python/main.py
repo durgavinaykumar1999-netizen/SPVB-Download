@@ -66,6 +66,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Cross-origin isolation is required by the FivePlay game iframe
+# (SharedArrayBuffer / crossOriginIsolated). It is enabled only on the game
+# page so the rest of the site and the other games keep their normal headers.
+CROSS_ORIGIN_ISOLATED_PATHS = {"/play/gta-5"}
+
+@app.middleware("http")
+async def game_isolation_headers(request, call_next):
+    response = await call_next(request)
+    path = request.url.path.rstrip("/") or "/"
+    if path in CROSS_ORIGIN_ISOLATED_PATHS:
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
+    return response
+
 # Request logging middleware
 @app.middleware("http")
 async def log_requests(request, call_next):

@@ -3,11 +3,45 @@
   "outputDirectory": "frontend/build",
   "rewrites": [
     {
+      "source": "/play/gta-5",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/play/gta-5/",
+      "destination": "/index.html"
+    },
+    {
       "source": "/play/gta-vc",
       "destination": "/index.html"
     }
   ],
   "headers": [
+    {
+      "source": "/play/gta-5",
+      "headers": [
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
+        }
+      ]
+    },
+    {
+      "source": "/play/gta-5/",
+      "headers": [
+        {
+          "key": "Cross-Origin-Opener-Policy",
+          "value": "same-origin"
+        },
+        {
+          "key": "Cross-Origin-Embedder-Policy",
+          "value": "credentialless"
+        }
+      ]
+    },
     {
       "source": "/ads.txt",
       "headers": [

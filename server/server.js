@@ -836,6 +836,19 @@ app.all('/api/*', (req, res) => {
   });
 });
 
+// ============ CROSS-ORIGIN ISOLATION (FivePlay game page only) ============
+// The iframed game needs SharedArrayBuffer / crossOriginIsolated. Scoped to the
+// single game route so the rest of the site and other games are unaffected.
+const CROSS_ORIGIN_ISOLATED_PATHS = new Set(['/play/gta-5']);
+app.use((req, res, next) => {
+  const cleanPath = (req.path || '').replace(/\/+$/, '') || '/';
+  if (CROSS_ORIGIN_ISOLATED_PATHS.has(cleanPath)) {
+    res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
+  }
+  next();
+});
+
 // ============ STATIC FILES & SPA FALLBACK ============
 const buildPath = path.join(__dirname, '..', 'frontend', 'build');
 if (fs.existsSync(buildPath)) {

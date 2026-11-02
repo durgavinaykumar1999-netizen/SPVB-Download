@@ -2,13 +2,7 @@ import { useState, useEffect } from 'react';
 import './GamesList.css';
 import ScrollingNotice from './ScrollingNotice';
 import AdBanner from './components/AdBanner';
-
-interface Game {
-  id: string;
-  name: string;
-  url: string;
-  thumbnail?: string;
-}
+import { Game, BUILTIN_GAMES, mergeGames } from './games';
 
 interface GamesListProps {
   onSelectGame: (game: Game) => void;
@@ -30,11 +24,14 @@ export default function GamesList({ onSelectGame }: GamesListProps) {
       const response = await fetch(`${apiUrl}/api/games/list`);
       const data = await response.json();
       if (data.success) {
-        setGames(data.games);
+        setGames(mergeGames(data.games));
+        setError('');
       } else {
+        setGames(BUILTIN_GAMES);
         setError(data.message || 'Failed to load games');
       }
     } catch (err) {
+      setGames(BUILTIN_GAMES);
       setError('Error loading games: ' + String(err));
     } finally {
       setLoading(false);
@@ -49,7 +46,7 @@ export default function GamesList({ onSelectGame }: GamesListProps) {
     );
   }
 
-  if (error) {
+  if (error && games.length === 0) {
     return (
       <div className="games-list-container">
         <div className="error">❌ {error}</div>

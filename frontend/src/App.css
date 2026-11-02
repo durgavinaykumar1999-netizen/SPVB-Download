@@ -2439,3 +2439,95 @@ main, article {
     height: auto;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* HOME PAGE GAME TICKER */
+/* ═══════════════════════════════════════════════════════════════ */
+
+.game-ticker {
+  display: block;
+  overflow: hidden;
+  text-decoration: none;
+  background: linear-gradient(90deg, rgba(8, 17, 32, 0.95), rgba(15, 58, 74, 0.95), rgba(8, 17, 32, 0.95));
+  border-top: 1px solid rgba(34, 211, 238, 0.25);
+  border-bottom: 1px solid rgba(34, 211, 238, 0.4);
+  cursor: pointer;
+}
+
+.game-ticker-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: game-ticker-scroll 30s linear infinite;
+  will-change: transform;
+}
+
+.game-ticker-track span {
+  flex-shrink: 0;
+  padding: 10px 48px 10px 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #a5f3fc;
+}
+
+.game-ticker:hover .game-ticker-track {
+  animation-play-state: paused;
+}
+
+@keyframes game-ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* CROSS-ORIGIN ISOLATION WARNING (game page) */
+/* ═══════════════════════════════════════════════════════════════ */
+
+.game-isolation-warning {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px 20px;
+  text-align: center;
+  background: rgba(5, 10, 18, 0.97);
+  color: #e6edf7;
+}
+
+.game-isolation-warning h2 {
+  font-size: clamp(20px, 3vw, 28px);
+  color: #f9a8a8;
+  margin: 0;
+}
+
+.game-isolation-warning p {
+  max-width: 620px;
+  line-height: 1.6;
+  color: #aab4c8;
+  margin: 0;
+}
+
+.game-isolation-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.game-isolation-warning .coming-soon-icon {
+  font-size: 52px;
+  margin-bottom: 0;
+  animation: none;
+}
+
+@media (max-width: 480px) {
+  .game-ticker-track span {
+    padding: 8px 32px 8px 0;
+    font-size: 11.5px;
+  }
+}

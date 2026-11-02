@@ -10,6 +10,7 @@ import MoviePage from './MoviePage';
 import LiveTV from './components/LiveTV';
 import InitialMobileAds from './components/InitialMobileAds';
 import { fingerprintQuery } from './fingerprint';
+import { BUILTIN_GAMES, Game, isFivePlayUrl } from './games';
 
 // Session-creation guards: coalesce concurrent calls (React StrictMode double
 // effects, multiple beat failures) so a page can never spawn more than one
@@ -596,6 +597,8 @@ const manualDownload = useCallback(async () => {
           </nav>
         </header>
 
+        <GameTicker />
+
         <section className="hero-section">
           <h1>
             <span className="gradient-text">SPVB</span> Downloader
@@ -820,6 +823,19 @@ function PlatformBadges() {
   );
 }
 
+
+function GameTicker() {
+  const text = '🎮 NEW: GTA V is now live — play free in your browser. Story Mode + Sandbox. Click here to play now »';
+
+  return (
+    <a className="game-ticker" href="/play/gta-5" aria-label="Play GTA V now">
+      <div className="game-ticker-track">
+        <span>{text}</span>
+        <span aria-hidden="true">{text}</span>
+      </div>
+    </a>
+  );
+}
 
 function DownloaderCard({ url, setUrl, validation, msg, loading, onGetInfo, onPaste }: any) {
   return (
@@ -1113,15 +1129,23 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   const [count, setCount] = useState(5000);
   const [loaded, setLoaded] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [isolated, setIsolated] = useState<boolean | null>(null);
 
   useEffect(() => {
     const fetchGameUrl = async () => {
       try {
         const pathname = window.location.pathname;
-        const gameId = pathname.split('/play/')[1];
+        const gameId = decodeURIComponent(pathname.split('/play/')[1] || '');
 
         if (!gameId) {
           setGameUrl('');
+          return;
+        }
+
+        const builtin = BUILTIN_GAMES.find((g) => g.id === gameId);
+        if (builtin) {
+          setGameUrl(builtin.url);
+          setGameName(builtin.name);
           return;
         }
 
@@ -1130,8 +1154,12 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         const data = await response.json();
 
         if (data.success && data.games) {
-          const game = data.games.find((g: any) => g.id === gameId);
+          const game = data.games.find((g: Game) => g.id === gameId);
           if (game) {
+            if (isFivePlayUrl(game.url)) {
+              window.location.replace('/play/gta-5');
+              return;
+            }
             setGameUrl(game.url);
             setGameName(game.name);
           } else {
@@ -1181,6 +1209,7 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   }, []);
 
   useEffect(() => {
+    setIsolated(typeof window.crossOriginIsolated === 'boolean' ? window.crossOriginIsolated : false);
     if (/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent)) {
       setControlsOpen(true);
     }
@@ -1208,6 +1237,8 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
     window.location.href = '/play';
   };
 
+  const isFivePlay = isFivePlayUrl(gameUrl);
+
   return (
     <div className="game-page">
       <div className="game-header">
@@ -1218,6 +1249,9 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         </div>
         <div className="game-header-actions">
           <button className="game-btn" onClick={() => setControlsOpen(v => !v)}>ℹ️ Controls</button>
+          {isFivePlay && (
+            <a className="game-btn" href={gameUrl} target="_blank" rel="noopener noreferrer">↗ New Tab</a>
+          )}
           <button className="game-btn green" onClick={toggleFullscreen}>⛶ Fullscreen</button>
           <button className="game-btn red" onClick={closeGame}>✕ Close</button>
         </div>
@@ -1229,13 +1263,29 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
             <iframe
               title="game"
               src={gameUrl}
-              allow="fullscreen; accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allow="cross-origin-isolated; fullscreen; autoplay; gamepad; clipboard-write; encrypted-media; accelerometer; gyroscope; picture-in-picture"
               onLoad={() => setLoaded(true)}
             />
             {!loaded && (
               <div className="game-loading">
                 <div className="spinner"></div>
                 <p>Loading game...</p>
+              </div>
+            )}
+            {isFivePlay && isolated === false && (
+              <div className="game-isolation-warning">
+                <div className="coming-soon-icon">⚠️</div>
+                <h2>This game needs cross-origin isolation</h2>
+                <p>
+                  Open this page in desktop Chrome or Edge over HTTPS. If it still does not start,
+                  open the game directly in a new tab.
+                </p>
+                <div className="game-isolation-actions">
+                  <a className="game-btn green" href={gameUrl} target="_blank" rel="noopener noreferrer">
+                    ↗ Open Game
+                  </a>
+                  <a className="game-btn" href="/play">← Back to Games</a>
+                </div>
               </div>
             )}
           </div>
@@ -1253,42 +1303,72 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         <div className="game-controls-overlay">
           <button className="close-btn-overlay" onClick={() => setControlsOpen(false)}>✕</button>
 
-          <strong>🖥️ Desktop Controls:</strong>
-          <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
-            <span style={{ display: 'block' }}>⬆️ Arrow Keys - Move Up/Down/Left/Right</span>
-            <span style={{ display: 'block' }}>Space - Action / Jump</span>
-            <span style={{ display: 'block' }}>E - Enter Vehicle</span>
-            <span style={{ display: 'block' }}>WASD - Alternative Move</span>
-          </div>
+          {isFivePlay ? (
+            <>
+              <strong>🎮 GTA V — How to start:</strong>
+              <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+                <span style={{ display: 'block' }}>⏎ Enter - Story Mode</span>
+                <span style={{ display: 'block' }}>Space, then 5 - Sandbox (City Map)</span>
+                <span style={{ display: 'block' }}>Space, then 6 - Sandbox (Coast Map)</span>
+                <span style={{ display: 'block' }}>🖱️ Click the game to capture the mouse, Esc releases it</span>
+              </div>
 
-          <strong>📱 Mobile Controls:</strong>
-          <div style={{ lineHeight: '1.8', marginBottom: '15px', color: '#22D3EE' }}>
-            <span style={{ display: 'block' }}>👆 Touch & Tap - Interact with game</span>
-            <span style={{ display: 'block' }}>🔄 Swipe - Movement/Control</span>
-            <span style={{ display: 'block' }}>📌 Long Press - Secondary action</span>
-            <span style={{ display: 'block' }}>🔙 Tilt Device - Some games use gyro</span>
-          </div>
+              <strong>⌨️ In-game controls:</strong>
+              <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+                <span style={{ display: 'block' }}>WASD - Move · Mouse - Aim / Camera</span>
+                <span style={{ display: 'block' }}>Shift - Sprint · Space - Jump / Handbrake</span>
+                <span style={{ display: 'block' }}>F - Enter / Exit vehicle · Q - Cover</span>
+                <span style={{ display: 'block' }}>= - Show FPS</span>
+              </div>
 
-          <strong>⌨️ General Controls:</strong>
-          <div style={{ lineHeight: '1.8' }}>
-            <span style={{ display: 'block' }}>F or ⛶ - Fullscreen Mode</span>
-            <span style={{ display: 'block' }}>ESC - Show/Hide This Help</span>
-            <span style={{ display: 'block' }}>✕ - Close Game</span>
-          </div>
+              <strong>⚠️ Requirements:</strong>
+              <div style={{ lineHeight: '1.8' }}>
+                <span style={{ display: 'block' }}>Desktop Chrome or Edge (latest), hardware acceleration + WebGPU</span>
+                <span style={{ display: 'block' }}>8 GB+ RAM and a dedicated/integrated GPU capable of WebGPU</span>
+                <span style={{ display: 'block' }}>~1.3-1.5 GB of game data on first load, decent internet</span>
+                <span style={{ display: 'block' }}>Not supported: phones, tablets, Safari/iOS</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <strong>🖥️ Desktop Controls:</strong>
+              <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+                <span style={{ display: 'block' }}>⬆️ Arrow Keys - Move Up/Down/Left/Right</span>
+                <span style={{ display: 'block' }}>Space - Action / Jump</span>
+                <span style={{ display: 'block' }}>E - Enter Vehicle</span>
+                <span style={{ display: 'block' }}>WASD - Alternative Move</span>
+              </div>
 
-          {/* Mobile-specific hint */}
-          {/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent) && (
-            <div style={{
-              marginTop: '20px',
-              padding: '12px',
-              background: 'rgba(34, 211, 238, 0.1)',
-              border: '1px solid rgba(34, 211, 238, 0.3)',
-              borderRadius: '6px',
-              fontSize: '13px',
-              color: '#AAB4C8'
-            }}>
-              💡 <strong>Mobile Tip:</strong> Most games respond to touch and taps. Try tapping on the game screen to interact. Use fullscreen mode (⛶) for better gameplay!
-            </div>
+              <strong>📱 Mobile Controls:</strong>
+              <div style={{ lineHeight: '1.8', marginBottom: '15px', color: '#22D3EE' }}>
+                <span style={{ display: 'block' }}>👆 Touch & Tap - Interact with game</span>
+                <span style={{ display: 'block' }}>🔄 Swipe - Movement/Control</span>
+                <span style={{ display: 'block' }}>📌 Long Press - Secondary action</span>
+                <span style={{ display: 'block' }}>🔙 Tilt Device - Some games use gyro</span>
+              </div>
+
+              <strong>⌨️ General Controls:</strong>
+              <div style={{ lineHeight: '1.8' }}>
+                <span style={{ display: 'block' }}>F or ⛶ - Fullscreen Mode</span>
+                <span style={{ display: 'block' }}>ESC - Show/Hide This Help</span>
+                <span style={{ display: 'block' }}>✕ - Close Game</span>
+              </div>
+
+              {/* Mobile-specific hint */}
+              {/iPhone|iPad|Android|webOS|BlackBerry/i.test(navigator.userAgent) && (
+                <div style={{
+                  marginTop: '20px',
+                  padding: '12px',
+                  background: 'rgba(34, 211, 238, 0.1)',
+                  border: '1px solid rgba(34, 211, 238, 0.3)',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  color: '#AAB4C8'
+                }}>
+                  💡 <strong>Mobile Tip:</strong> Most games respond to touch and taps. Try tapping on the game screen to interact. Use fullscreen mode (⛶) for better gameplay!
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
