@@ -1146,7 +1146,6 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   const [loaded, setLoaded] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [isolated, setIsolated] = useState<boolean | null>(null);
-  const isMobileView = isMobileDevice();
 
   useEffect(() => {
     const fetchGameUrl = async () => {
