@@ -6,6 +6,9 @@ export interface Game {
 }
 
 export const FIVEPLAY_URL = 'https://fiveplay.lol/';
+export const GTA3_DESKTOP_URL = 'https://gta3-web.vercel.app/';
+export const GTA3_MOBILE_URL = 'https://gta3browser.vercel.app/';
+export const GTA3_URL = GTA3_DESKTOP_URL;
 
 export const BUILTIN_GAMES: Game[] = [
   {
@@ -13,6 +16,12 @@ export const BUILTIN_GAMES: Game[] = [
     name: 'GTA V (FivePlay)',
     url: FIVEPLAY_URL,
     thumbnail: '/fiveplay-thumb.svg',
+  },
+  {
+    id: 'gta-3',
+    name: 'GTA III (re3 Web)',
+    url: GTA3_URL,
+    thumbnail: '/gta3-thumb.svg',
   },
 ];
 
@@ -28,6 +37,15 @@ export function isBuiltinGameId(id: string): boolean {
 
 export function isFivePlayUrl(url: string): boolean {
   return normalizeUrl(url) === normalizeUrl(FIVEPLAY_URL);
+}
+
+export function isGta3Url(url: string): boolean {
+  const normalized = normalizeUrl(url);
+  return normalized === normalizeUrl(GTA3_DESKTOP_URL) || normalized === normalizeUrl(GTA3_MOBILE_URL);
+}
+
+export function isGta3MobileUrl(url: string): boolean {
+  return normalizeUrl(url) === normalizeUrl(GTA3_MOBILE_URL);
 }
 
 export function mergeGames(apiGames: Game[] = []): Game[] {

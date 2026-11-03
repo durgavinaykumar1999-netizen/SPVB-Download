@@ -2550,3 +2550,31 @@ main, article {
 .game-isolation-direct:hover {
   color: #bae6fd;
 }
+
+.game-frame.with-note {
+  display: flex;
+  flex-direction: column;
+}
+
+.game-frame.with-note iframe {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+
+.game-download-note {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  background: #0f2233;
+  border-bottom: 1px solid #1e3a52;
+  color: #bae6fd;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  position: relative;
+  z-index: 2;
+}
+
+.game-download-note strong {
+  color: #fbbf24;
+}

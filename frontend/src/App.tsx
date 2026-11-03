@@ -10,7 +10,7 @@ import MoviePage from './MoviePage';
 import LiveTV from './components/LiveTV';
 import InitialMobileAds from './components/InitialMobileAds';
 import { fingerprintQuery } from './fingerprint';
-import { BUILTIN_GAMES, Game, isFivePlayUrl } from './games';
+import { BUILTIN_GAMES, GTA3_MOBILE_URL, Game, isFivePlayUrl, isGta3MobileUrl, isGta3Url } from './games';
 
 // Session-creation guards: coalesce concurrent calls (React StrictMode double
 // effects, multiple beat failures) so a page can never spawn more than one
@@ -22,6 +22,22 @@ let lastSessionCreateAt = 0;
 // All ads are clickable (opens in new tab on click)
 // Ads show on download results pages (when metadata present) and history pages
 const SHOW_THIRD_PARTY_ADS = true;
+
+const isMobileDevice = (): boolean =>
+  /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+  || (navigator.maxTouchPoints > 1 && /Macintosh/i.test(navigator.userAgent));
+
+const LOCAL_HTTPS_PORT = 1443;
+
+const isLocalInsecureHttp = (): boolean => {
+  if (typeof window === 'undefined' || window.location.protocol !== 'http:') return false;
+  const host = window.location.hostname;
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return false;
+  return /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/.test(host);
+};
+
+const secureLocalUrl = (): string =>
+  `https://${window.location.hostname}:${LOCAL_HTTPS_PORT}${window.location.pathname}${window.location.search}${window.location.hash}`;
 
 interface Quality {
   label: string;
@@ -1130,6 +1146,7 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   const [loaded, setLoaded] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
   const [isolated, setIsolated] = useState<boolean | null>(null);
+  const isMobileView = isMobileDevice();
 
   useEffect(() => {
     const fetchGameUrl = async () => {
@@ -1144,7 +1161,13 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
 
         const builtin = BUILTIN_GAMES.find((g) => g.id === gameId);
         if (builtin) {
-          setGameUrl(builtin.url);
+          const needsSecureLocal = builtin.id === 'gta-5' || (builtin.id === 'gta-3' && isMobileDevice());
+          if (needsSecureLocal && isLocalInsecureHttp()) {
+            window.location.replace(secureLocalUrl());
+            return;
+          }
+          const url = builtin.id === 'gta-3' && isMobileDevice() ? GTA3_MOBILE_URL : builtin.url;
+          setGameUrl(url);
           setGameName(builtin.name);
           return;
         }
@@ -1237,6 +1260,8 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
   };
 
   const isFivePlay = isFivePlayUrl(gameUrl);
+  const isGta3 = isGta3Url(gameUrl);
+  const isGta3Mobile = isGta3MobileUrl(gameUrl);
   const browserLabel = (navigator.userAgent.match(/Chrome\/[\d.]+/) || ['Unknown browser'])[0];
 
   // If the browser cached an old copy of this page without the COOP/COEP
@@ -1281,7 +1306,18 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
 
       <div className="game-body">
         {gameUrl ? (
-          <div className="game-frame">
+          <div className={`game-frame${isGta3 ? ' with-note' : ''}`}>
+            {isGta3 && (
+              <div className="game-download-note">
+                {isGta3Mobile ? (
+                  <>⏳ First load downloads ~275 MB. Press <strong>PLAY GAME</strong> inside the window and
+                  keep this tab open while the download % completes — it can take several minutes.</>
+                ) : (
+                  <>⏳ First load streams game data (~100 MB initial, up to ~860 MB total). Keep this tab
+                  open while it loads — progress is shown inside the game window and can take 1–3 minutes.</>
+                )}
+              </div>
+            )}
             <iframe
               title="game"
               src={gameUrl}
@@ -1331,7 +1367,43 @@ function GamePage({ onClose }: { onClose?: () => void } = {}) {
         <div className="game-controls-overlay">
           <button className="close-btn-overlay" onClick={() => setControlsOpen(false)}>✕</button>
 
-          {isFivePlay ? (
+          {isGta3 ? (
+            <>
+              <strong>🎮 GTA III — How to start:</strong>
+              <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+                {isGta3Mobile ? (
+                  <>
+                    <span style={{ display: 'block' }}>▶️ Press PLAY GAME inside the window to start</span>
+                    <span style={{ display: 'block' }}>⏳ First load downloads ~275 MB — progress % and ETA are shown inside the game window</span>
+                    <span style={{ display: 'block' }}>📱 On-screen touch controls appear automatically in mobile view</span>
+                    <span style={{ display: 'block' }}>🖱️ Touch and drag the game view to aim or look around</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ display: 'block' }}>▶️ The game starts loading automatically in desktop view</span>
+                    <span style={{ display: 'block' }}>⏳ First load streams game data (~100 MB initial, up to ~860 MB total) — progress is shown inside the game window</span>
+                    <span style={{ display: 'block' }}>🖱️ Click the game once to capture the mouse · Esc releases it</span>
+                    <span style={{ display: 'block' }}>🖥️ Desktop view only — on-screen touch controls are hidden</span>
+                  </>
+                )}
+              </div>
+
+              <strong>⌨️ In-game controls:</strong>
+              <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>
+                <span style={{ display: 'block' }}>WASD / Arrow Keys - Move · Mouse - Aim / Camera</span>
+                <span style={{ display: 'block' }}>Left Click / Ctrl - Fire · Space - Jump / Handbrake</span>
+                <span style={{ display: 'block' }}>F - Enter / Exit vehicle · Enter - Confirm</span>
+                <span style={{ display: 'block' }}>Esc - Pause menu</span>
+              </div>
+
+              <strong>⚠️ Requirements:</strong>
+              <div style={{ lineHeight: '1.8' }}>
+                <span style={{ display: 'block' }}>Chrome, Edge or Firefox with WebGL 2 and hardware acceleration</span>
+                <span style={{ display: 'block' }}>4 GB+ RAM · keep this tab open during the first load</span>
+                <span style={{ display: 'block' }}>{isGta3Mobile ? 'Mobile view shows on-screen touch controls' : 'Desktop view uses keyboard and mouse; on-screen controls are off'}</span>
+              </div>
+            </>
+          ) : isFivePlay ? (
             <>
               <strong>🎮 GTA V — How to start:</strong>
               <div style={{ lineHeight: '1.8', marginBottom: '15px' }}>

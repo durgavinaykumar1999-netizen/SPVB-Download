@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a0d14"/>
+      <stop offset="0.55" stop-color="#1b2436"/>
+      <stop offset="1" stop-color="#080a10"/>
+    </linearGradient>
+    <linearGradient id="sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#f97316" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset="1" stop-color="#f97316"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="360" fill="url(#bg)"/>
+  <circle cx="500" cy="210" r="120" fill="url(#sun)" opacity="0.35"/>
+  <g opacity="0.55" fill="#111827">
+    <path d="M0 300h40v-60h22v60h18v-92h30v92h24v-44h20v44h28v-76h34v76h22v-54h26v54h30v-84h28v84h20v-48h24v48h28v-66h30v66h22v-38h20v38h26v-72h30v72h22v-52h24v52h28v-90h26v90h20v-40h22v40h24v-64h28v64h40v60H0z"/>
+  </g>
+  <g opacity="0.28" stroke="#fbbf24" stroke-width="1">
+    <path d="M0 90h640M0 180h640M0 270h640M160 0v360M320 0v360M480 0v360"/>
+  </g>
+  <text x="320" y="146" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-size="78" font-weight="900" fill="#ffffff" letter-spacing="3">GTA III</text>
+  <rect x="225" y="172" width="190" height="4" rx="2" fill="url(#accent)"/>
+  <text x="320" y="216" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#fde68a" letter-spacing="6">LIBERTY CITY</text>
+  <text x="320" y="258" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#9ca3af">Play free in your browser</text>
+  <rect x="6" y="6" width="628" height="348" rx="10" fill="none" stroke="#fbbf24" stroke-opacity="0.35" stroke-width="2"/>
+</svg>
